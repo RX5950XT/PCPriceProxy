@@ -3,9 +3,10 @@ import iconv from 'iconv-lite';
 import { createHash } from 'crypto';
 import type { Scraper } from './base.js';
 import type { Product, ScraperResult, Source } from '../shared/types.js';
-import { COOLPC_CATEGORY_MAP, USER_AGENTS, KNOWN_BRANDS } from '../shared/constants.js';
+import { COOLPC_CATEGORY_MAP, USER_AGENTS } from '../shared/constants.js';
 import { ProductCategory } from '../shared/types.js';
 import { ScraperError } from '../shared/errors.js';
+import { extractBrand } from '../processing/normalizer.js';
 
 const COOLPC_URL = 'https://www.coolpc.com.tw/evaluate.php';
 
@@ -181,15 +182,4 @@ function detectPriceChange(text: string): 'up' | 'down' | 'new' | null {
   if (text.includes('↗') || text.includes('漲')) return 'up';
   if (text.includes('新品') || text.includes('NEW')) return 'new';
   return null;
-}
-
-/** Extract brand from product name using known brands list */
-function extractBrand(name: string): string | undefined {
-  const upperName = name.toUpperCase();
-  for (const brand of KNOWN_BRANDS) {
-    if (upperName.includes(brand.toUpperCase())) {
-      return brand;
-    }
-  }
-  return undefined;
 }

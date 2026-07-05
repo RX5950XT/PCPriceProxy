@@ -4,6 +4,8 @@ import { ProductRepository } from './storage/product-repository.js';
 import { MemoryCache } from './storage/cache.js';
 import { normalizeProduct } from './processing/normalizer.js';
 import { categorizeProduct } from './processing/categorizer.js';
+import { MIN_VALID_PRICE } from './shared/constants.js';
+import { isDiyProduct } from './processing/diy-filter.js';
 import type { Product } from './shared/types.js';
 
 export class Scheduler {
@@ -52,7 +54,9 @@ export class Scheduler {
 
         const processed: Product[] = result.products
           .map(normalizeProduct)
-          .map(categorizeProduct);
+          .map(categorizeProduct)
+          .filter(p => p.price >= MIN_VALID_PRICE)
+          .filter(p => isDiyProduct(p));
 
         const repo = new ProductRepository();
         repo.upsertMany(processed);
@@ -78,6 +82,8 @@ export class Scheduler {
     // Run matching to group products across sources
     try {
       const repo = new ProductRepository();
+      const removed = repo.deleteNonDiyProducts();
+      if (removed > 0) console.log(`[Scheduler] Removed ${removed} non-DIY products.`);
       repo.updateMatchGroups();
     } catch (matchErr) {
       console.error('[Scheduler] Product matching failed:', matchErr);

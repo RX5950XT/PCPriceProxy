@@ -61,21 +61,78 @@ export const AUTOBUY_CATEGORY_MAP: Record<string, ProductCategory> = {
   '28': ProductCategory.PSU,
 };
 
-// Known brand list for brand extraction
+/**
+ * Canonical brand list for brand extraction.
+ * 注意：不要放入子品牌（如 ROG / AORUS / TUF），以免同一母品牌被拆成多個。
+ */
 export const KNOWN_BRANDS = [
+  // 平台
   'Intel', 'AMD', 'NVIDIA',
-  'ASUS', 'MSI', 'GIGABYTE', 'ASRock',
-  'Corsair', 'G.SKILL', 'Kingston', 'Crucial', 'TEAMGROUP',
-  'Samsung', 'WD', 'Western Digital', 'Seagate', 'Micron', 'KIOXIA',
-  'EVGA', 'ZOTAC', 'Sapphire', 'PowerColor', 'XFX', 'PNY', 'Inno3D', 'Palit', 'Gainward',
-  'Seasonic', 'FSP', 'Cooler Master', 'NZXT', 'be quiet!', 'Thermaltake',
-  'Lian Li', 'Fractal Design', 'Phanteks',
+  // 主機板 / 顯卡 三大
+  'ASUS', 'MSI', 'GIGABYTE', 'ASRock', 'BIOSTAR',
+  // 記憶體
+  'Corsair', 'G.SKILL', 'Kingston', 'Crucial', 'TEAMGROUP', 'ADATA', 'Apacer', 'Patriot', 'Klevv',
+  // 儲存
+  'Samsung', 'WD', 'Seagate', 'Micron', 'KIOXIA', 'SanDisk', 'Solidigm',
+  // 顯卡 AIB
+  'EVGA', 'ZOTAC', 'Sapphire', 'PowerColor', 'XFX', 'PNY', 'Leadtek', 'Inno3D', 'Palit', 'Gainward', 'GALAX', 'COLORFUL', 'Maxsun',
+  // 電源 / 機殼 / 散熱
+  'Seasonic', 'FSP', 'Cooler Master', 'NZXT', 'be quiet!', 'Thermaltake', 'Antec', 'SilverStone', 'Montech', 'In Win',
+  'Lian Li', 'Fractal Design', 'Phanteks', 'JONSBO', 'TRYX',
   'Noctua', 'Arctic', 'DeepCool', 'ID-COOLING', 'Thermalright',
-  'BenQ', 'ViewSonic', 'DELL', 'LG', 'Acer', 'AOC', 'ASUS ROG',
-  'Logitech', 'Razer', 'SteelSeries', 'HyperX',
-  'TP-Link', 'ASUS', 'Netgear', 'Ubiquiti',
-  'Microsoft', 'Apple',
+  // 螢幕（GIGABYTE 已列於主機板段，勿在此重複大小寫變體）
+  'BenQ', 'ViewSonic', 'DELL', 'LG', 'Acer', 'AOC', 'Philips',
+  // 周邊
+  'Logitech', 'Razer', 'SteelSeries', 'HyperX', 'darkFlash',
+  // 網通（ASUS 已列於主機板段，不重複）
+  'TP-Link', 'Netgear', 'Ubiquiti', 'D-Link', 'Synology', 'QNAP', 'Mercusys',
+  // 軟體 / 其他
+  'Microsoft', 'Apple', 'ZhiTai',
 ] as const;
+
+/**
+ * 品牌別名 → 正規名稱對照。
+ * 解決同一品牌在不同通路以不同寫法出現（中文名、全寫、空白差異），避免品牌碎裂。
+ * key 以「大寫、去除多餘空白」後比對。
+ */
+export const BRAND_ALIASES: Record<string, string> = {
+  'WESTERN DIGITAL': 'WD',
+  'WD_BLACK': 'WD',
+  '威剛': 'ADATA',
+  '十銓': 'TEAMGROUP',
+  'T-FORCE': 'TEAMGROUP',
+  '宇瞻': 'Apacer',
+  '美光': 'Crucial',
+  '金士頓': 'Kingston',
+  '影馳': 'GALAX',
+  '撼訊': 'PowerColor',
+  '藍寶': 'Sapphire',
+  '藍寶石': 'Sapphire',
+  '七彩虹': 'COLORFUL',
+  '銘瑄': 'Maxsun',
+  '麗臺 NVIDIA': 'Leadtek',
+  'LEADTEK 麗臺': 'Leadtek',
+  '麗臺': 'Leadtek',
+  '微星': 'MSI',
+  '華碩': 'ASUS',
+  '技嘉': 'GIGABYTE',
+  '華擎': 'ASRock',
+  '映泰': 'BIOSTAR',
+  '海盜船': 'Corsair',
+  '酷碼': 'Cooler Master',
+  '聯力': 'Lian Li',
+  '喬思伯': 'JONSBO',
+  '芝奇': 'G.SKILL',
+  '希捷': 'Seagate',
+  '三星': 'Samsung',
+  '群暉': 'Synology',
+  '威聯通': 'QNAP',
+  '水星': 'Mercusys',
+  '大飛': 'darkFlash',
+  '羅技': 'Logitech',
+  '雷蛇': 'Razer',
+  '致態': 'ZhiTai',
+};
 
 export const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -87,3 +144,74 @@ export const DEFAULT_SCRAPE_INTERVAL_MINUTES = 30;
 export const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 export const DEFAULT_PAGE_LIMIT = 50;
 export const MAX_PAGE_LIMIT = 200;
+
+/**
+ * 有效商品的最低價（TWD）。低於此價多為「$1 登錄送贈品 / 竊盜險 / 抽獎」等促銷假項，
+ * 並非真正可購買的零件，於處理管線過濾掉。
+ */
+export const MIN_VALID_PRICE = 10;
+
+/** 比價站保留的 DIY 相關分類；OTHER 與周邊雜項不寫入 DB。 */
+export const DIY_CATEGORIES: readonly ProductCategory[] = [
+  ProductCategory.CPU,
+  ProductCategory.GPU,
+  ProductCategory.MOTHERBOARD,
+  ProductCategory.RAM,
+  ProductCategory.SSD,
+  ProductCategory.HDD,
+  ProductCategory.PSU,
+  ProductCategory.CASE,
+  ProductCategory.COOLER,
+  ProductCategory.MONITOR,
+  ProductCategory.FAN,
+  ProductCategory.NETWORK,
+  ProductCategory.KEYBOARD,
+  ProductCategory.MOUSE,
+  ProductCategory.HEADSET,
+  ProductCategory.SPEAKER,
+  ProductCategory.PACKAGE,
+  ProductCategory.OS,
+  ProductCategory.SOFTWARE,
+  ProductCategory.OPTICAL_DRIVE,
+];
+
+const DIY_CATEGORY_SET = new Set<string>(DIY_CATEGORIES);
+
+export function isDiyCategory(category: ProductCategory): boolean {
+  return DIY_CATEGORY_SET.has(category);
+}
+
+/**
+ * 分類顯示中繼資料（單一真相）。
+ * label：中文顯示名；icon：側欄與標籤用的圖示；order：側欄排序（小→大，核心零件在前）。
+ * 前端側欄與卡片標籤皆由此驅動，避免硬編碼分類清單與英文 enum 直出。
+ */
+export interface CategoryMeta {
+  readonly label: string;
+  readonly icon: string;
+  readonly order: number;
+}
+
+export const CATEGORY_META: Record<ProductCategory, CategoryMeta> = {
+  [ProductCategory.CPU]: { label: 'CPU 處理器', icon: '🧠', order: 1 },
+  [ProductCategory.MOTHERBOARD]: { label: '主機板', icon: '🧩', order: 2 },
+  [ProductCategory.GPU]: { label: '顯示卡', icon: '🎮', order: 3 },
+  [ProductCategory.RAM]: { label: '記憶體', icon: '🧮', order: 4 },
+  [ProductCategory.SSD]: { label: '固態硬碟 SSD', icon: '⚡', order: 5 },
+  [ProductCategory.HDD]: { label: '傳統硬碟 HDD', icon: '💽', order: 6 },
+  [ProductCategory.PSU]: { label: '電源供應器', icon: '🔌', order: 7 },
+  [ProductCategory.CASE]: { label: '機殼', icon: '🗄️', order: 8 },
+  [ProductCategory.COOLER]: { label: '散熱器', icon: '❄️', order: 9 },
+  [ProductCategory.MONITOR]: { label: '螢幕', icon: '🖥️', order: 10 },
+  [ProductCategory.FAN]: { label: '系統風扇', icon: '🌀', order: 11 },
+  [ProductCategory.KEYBOARD]: { label: '鍵盤', icon: '⌨️', order: 12 },
+  [ProductCategory.MOUSE]: { label: '滑鼠', icon: '🖱️', order: 13 },
+  [ProductCategory.HEADSET]: { label: '耳機 / 麥克風', icon: '🎧', order: 14 },
+  [ProductCategory.SPEAKER]: { label: '喇叭 / 音響', icon: '🔊', order: 15 },
+  [ProductCategory.NETWORK]: { label: '網通設備', icon: '📡', order: 16 },
+  [ProductCategory.OPTICAL_DRIVE]: { label: '光碟機', icon: '📀', order: 17 },
+  [ProductCategory.OS]: { label: '作業系統', icon: '🪟', order: 18 },
+  [ProductCategory.SOFTWARE]: { label: '應用軟體', icon: '🛡️', order: 19 },
+  [ProductCategory.PACKAGE]: { label: '整機 / 組合', icon: '🎁', order: 20 },
+  [ProductCategory.OTHER]: { label: '其他', icon: '📦', order: 99 },
+};

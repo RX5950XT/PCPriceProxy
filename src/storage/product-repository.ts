@@ -2,6 +2,10 @@ import type Database from 'better-sqlite3';
 import type { Product, PriceHistoryEntry, SourceStatus, Source, MatchGroup, ProductFilters } from '../shared/types.js';
 import { getDatabase } from './database.js';
 import { matchProducts } from '../processing/matcher.js';
+import { DIY_CATEGORIES } from '../shared/constants.js';
+import { isRealBundle } from '../processing/categorizer.js';
+import { ProductCategory } from '../shared/types.js';
+import { sortSubcategories } from '../shared/subcategory-sort.js';
 
 interface ProductRow {
   id: string;
@@ -172,8 +176,9 @@ export class ProductRepository {
   }
 
   getCategories(): { category: string; count: number }[] {
+    // 以「比價組數」計（與列表顯示的「共 N 組」一致），避免件數 vs 組數落差造成的困惑
     return this.db.prepare(
-      'SELECT category, COUNT(*) as count FROM products GROUP BY category ORDER BY count DESC'
+      'SELECT category, COUNT(*) as count FROM match_groups GROUP BY category ORDER BY count DESC'
     ).all() as { category: string; count: number }[];
   }
 
@@ -201,14 +206,37 @@ export class ProductRepository {
     return result.changes;
   }
 
+  /** 刪除非 DIY 商品（OTHER、周邊雜訊、假 PACKAGE 如 VR/筆電搭購列）。 */
+  deleteNonDiyProducts(): number {
+    const placeholders = DIY_CATEGORIES.map(() => '?').join(', ');
+    let removed = this.db.prepare(
+      `DELETE FROM products WHERE category NOT IN (${placeholders})`,
+    ).run(...DIY_CATEGORIES).changes;
+
+    const fakePackages = this.db.prepare(
+      `SELECT id, raw_name FROM products WHERE category = ?`,
+    ).all(ProductCategory.PACKAGE) as { id: string; raw_name: string }[];
+
+    const deleteStmt = this.db.prepare('DELETE FROM products WHERE id = ?');
+    for (const row of fakePackages) {
+      if (!isRealBundle(row.raw_name)) {
+        deleteStmt.run(row.id);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   getSubcategories(category: string): { subcategory: string; count: number }[] {
-    return this.db.prepare(`
+    // 以比價組數計，與列表一致
+    const rows = this.db.prepare(`
       SELECT subcategory, COUNT(*) as count
-      FROM products
+      FROM match_groups
       WHERE category = ? AND subcategory IS NOT NULL AND subcategory != ''
       GROUP BY subcategory
-      ORDER BY count DESC
+      ORDER BY subcategory ASC
     `).all(category) as { subcategory: string; count: number }[];
+    return sortSubcategories(category, rows);
   }
 
   getBrands(category?: string, subcategory?: string): { brand: string; count: number }[] {
@@ -226,16 +254,17 @@ export class ProductRepository {
 
     const where = conditions.join(' AND ');
 
+    // 以比價組數計，與列表一致
     return this.db.prepare(`
       SELECT brand, COUNT(*) as count
-      FROM products
+      FROM match_groups
       WHERE ${where}
       GROUP BY brand
       ORDER BY count DESC
     `).all(params) as { brand: string; count: number }[];
   }
 
-  updateMatchGroups(similarityThreshold = 0.6): void {
+  updateMatchGroups(similarityThreshold = 0.7): void {
     const allRows = this.db.prepare('SELECT * FROM products').all() as ProductRow[];
     const allProducts = allRows.map(rowToProduct);
 
@@ -265,20 +294,36 @@ export class ProductRepository {
       // Rebuild match_groups table
       this.db.prepare('DELETE FROM match_groups').run();
       this.db.prepare(`
+        WITH source_prices AS (
+          SELECT match_group_id, source, MIN(price) as source_price
+          FROM products
+          GROUP BY match_group_id, source
+        ),
+        group_prices AS (
+          SELECT
+            match_group_id,
+            MIN(source_price) as lowest_price,
+            MAX(source_price) as highest_price,
+            COUNT(*) as source_count
+          FROM source_prices
+          GROUP BY match_group_id
+        )
         INSERT INTO match_groups (id, name, brand, model, category, subcategory, lowest_price, highest_price, has_multiple_sources, updated_at)
-        SELECT 
-          match_group_id,
-          name as name, 
-          MAX(brand) as brand,
-          MAX(model) as model,
-          MAX(category) as category,
-          MAX(subcategory) as subcategory,
-          MIN(price) as lowest_price,
-          MAX(price) as highest_price,
-          CASE WHEN COUNT(id) > 1 THEN 1 ELSE 0 END as has_multiple_sources,
-          MAX(updated_at) as updated_at
-        FROM products
-        GROUP BY match_group_id
+        SELECT
+          p.match_group_id,
+          -- 取組內最短（最乾淨）的名稱作為標題
+          (SELECT p2.name FROM products p2 WHERE p2.match_group_id = p.match_group_id ORDER BY LENGTH(p2.name) ASC, p2.name ASC LIMIT 1) as name,
+          MAX(p.brand) as brand,
+          MAX(p.model) as model,
+          MAX(p.category) as category,
+          MAX(p.subcategory) as subcategory,
+          gp.lowest_price,
+          gp.highest_price,
+          CASE WHEN gp.source_count > 1 THEN 1 ELSE 0 END as has_multiple_sources,
+          MAX(p.updated_at) as updated_at
+        FROM products p
+        JOIN group_prices gp ON gp.match_group_id = p.match_group_id
+        GROUP BY p.match_group_id
       `).run();
     });
 
@@ -337,9 +382,10 @@ export class ProductRepository {
       price_asc: 'lowest_price ASC',
       price_desc: 'highest_price DESC',
       name: 'name ASC',
-      updated: 'updated_at DESC',
+      // 預設「綜合排序」：跨店可比價的群組優先（避免最後爬取的 Autobuy 單店商品佔滿首頁），其次依最新更新
+      updated: 'has_multiple_sources DESC, updated_at DESC',
     };
-    const orderBy = sortMap[filters.sort ?? 'updated'] ?? 'updated_at DESC';
+    const orderBy = sortMap[filters.sort ?? 'updated'] ?? 'has_multiple_sources DESC, updated_at DESC';
 
     const page = Math.max(1, filters.page ?? 1);
     const limit = Math.min(200, Math.max(1, filters.limit ?? 50));

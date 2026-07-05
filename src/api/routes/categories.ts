@@ -1,20 +1,43 @@
 import { Hono } from 'hono';
 import { ProductRepository } from '../../storage/product-repository.js';
-import type { ApiResponse } from '../../shared/types.js';
+import type { ApiResponse, ProductCategory } from '../../shared/types.js';
+import { CATEGORY_META } from '../../shared/constants.js';
 
 export const categoryRoutes = new Hono();
+
+interface CategoryListItem {
+  category: string;
+  label: string;
+  icon: string;
+  order: number;
+  count: number;
+}
 
 categoryRoutes.get('/', (c) => {
   const repo = new ProductRepository();
   const categories = repo.getCategories();
 
-  const response: ApiResponse<{ category: string; count: number }[]> = {
+  // 以 CATEGORY_META 充實顯示資訊（中文名 / 圖示 / 排序），讓前端側欄完全資料驅動。
+  const enriched: CategoryListItem[] = categories
+    .map(({ category, count }) => {
+      const meta = CATEGORY_META[category as ProductCategory];
+      return {
+        category,
+        label: meta?.label ?? category,
+        icon: meta?.icon ?? '📦',
+        order: meta?.order ?? 98,
+        count,
+      };
+    })
+    .sort((a, b) => a.order - b.order);
+
+  const response: ApiResponse<CategoryListItem[]> = {
     success: true,
-    data: categories,
+    data: enriched,
     metadata: {
-      total: categories.length,
+      total: enriched.length,
       page: 1,
-      limit: categories.length,
+      limit: enriched.length,
     },
   };
   return c.json(response);

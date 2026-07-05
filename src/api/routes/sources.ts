@@ -4,6 +4,8 @@ import { getScraper, getAllScrapers } from '../../scrapers/registry.js';
 import { MemoryCache } from '../../storage/cache.js';
 import { normalizeProduct } from '../../processing/normalizer.js';
 import { categorizeProduct } from '../../processing/categorizer.js';
+import { MIN_VALID_PRICE } from '../../shared/constants.js';
+import { isDiyProduct } from '../../processing/diy-filter.js';
 import type { ApiResponse, SourceStatus, Source } from '../../shared/types.js';
 import { ApiError } from '../../shared/errors.js';
 
@@ -31,7 +33,11 @@ sourceRoutes.post('/refresh', (c) => {
       const repo = new ProductRepository();
       try {
         const result = await scraper.scrape();
-        const processed = result.products.map(normalizeProduct).map(categorizeProduct);
+        const processed = result.products
+          .map(normalizeProduct)
+          .map(categorizeProduct)
+          .filter(p => p.price >= MIN_VALID_PRICE)
+          .filter(p => isDiyProduct(p));
         repo.upsertMany(processed);
         repo.logScrape(scraper.source, 'success', processed.length, result.durationMs);
         console.log(`[Refresh API] ${scraper.source}: ${processed.length} products`);
@@ -45,6 +51,8 @@ sourceRoutes.post('/refresh', (c) => {
     try {
       console.log(`[Refresh API] Running product matching...`);
       const repo = new ProductRepository();
+      const removed = repo.deleteNonDiyProducts();
+      if (removed > 0) console.log(`[Refresh API] Removed ${removed} non-DIY products.`);
       repo.updateMatchGroups();
       mainCache.invalidate();
       console.log(`[Refresh API] Product matching completed.`);
@@ -78,9 +86,13 @@ sourceRoutes.post('/:name/refresh', async (c) => {
     const result = await scraper.scrape();
     const processed = result.products
       .map(normalizeProduct)
-      .map(categorizeProduct);
+      .map(categorizeProduct)
+      .filter(p => p.price >= MIN_VALID_PRICE)
+      .filter(p => isDiyProduct(p));
 
     repo.upsertMany(processed);
+    const removed = repo.deleteNonDiyProducts();
+    if (removed > 0) console.log(`[Refresh API] ${sourceName}: removed ${removed} non-DIY products.`);
     repo.logScrape(sourceName, 'success', processed.length, result.durationMs);
     
     try {

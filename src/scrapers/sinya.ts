@@ -2,7 +2,8 @@ import { createHash } from 'crypto';
 import type { Scraper } from './base.js';
 import type { Product, ScraperResult, Source } from '../shared/types.js';
 import { ProductCategory } from '../shared/types.js';
-import { USER_AGENTS, KNOWN_BRANDS } from '../shared/constants.js';
+import { USER_AGENTS } from '../shared/constants.js';
+import { extractBrand } from '../processing/normalizer.js';
 import { ScraperError } from '../shared/errors.js';
 
 const SINYA_API_URL = 'https://www.sinya.com.tw/diy/api_prods';
@@ -148,7 +149,7 @@ function parseSinyaItem(item: unknown, scrapedAt: string): Product | null {
     price,
     category,
     subcategory: (obj.subcategory ?? obj.sub_cat) as string | undefined,
-    brand: (obj.brand as string | undefined) ?? extractBrandFromName(name),
+    brand: resolveBrand(obj.brand, name),
     model: obj.model as string | undefined,
     specs: extractSpecs(obj),
     inStock,
@@ -160,13 +161,13 @@ function parseSinyaItem(item: unknown, scrapedAt: string): Product | null {
   };
 }
 
-/** Extract brand from product name using known brands list */
-function extractBrandFromName(name: string): string | undefined {
-  const upperName = name.toUpperCase();
-  for (const brand of KNOWN_BRANDS) {
-    if (upperName.includes(brand.toUpperCase())) return brand;
-  }
-  return undefined;
+/**
+ * 解析品牌：優先用 API 提供的品牌（正規化空字串為 undefined），其次由品名抽取。
+ * 避免 API 回空字串 "" 時被當成有效品牌寫入 DB（'' 非 nullish，後續無法以品名回補）。
+ */
+function resolveBrand(apiBrandRaw: unknown, name: string): string | undefined {
+  const apiBrand = typeof apiBrandRaw === 'string' && apiBrandRaw.trim() ? apiBrandRaw.trim() : undefined;
+  return extractBrand(apiBrand ?? name) ?? apiBrand;
 }
 
 /** Extract spec fields from raw item */
