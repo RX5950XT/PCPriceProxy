@@ -205,3 +205,95 @@ describe('categorizeProduct 分類順序', () => {
     expect(black).not.toBe(white);
   });
 });
+
+describe('第十三輪：HDD/FAN/NETWORK 污染與子分類修正', () => {
+  it('Razer Barracuda（梭魚）耳機不可因 BARRACUDA 落入 HDD', () => {
+    const raw = '雷蛇Razer Barracuda X 梭魚X 電競耳機(2022)/無線/記憶耳墊/心形指向麥克風';
+    expect(categorizeProduct(makeProduct(raw, ProductCategory.HDD)).category).toBe(ProductCategory.HEADSET);
+  });
+
+  it('機殼風扇的「1900 RPM / PWM / 單入組」不可誤中 HDD', () => {
+    const raw = '華碩 TUF Gaming TF120 白 A.RGB 單入組 (PWM/抗震襯墊/進階流體動力軸承/1900 RPM/2年保固)';
+    const out = categorizeProduct(makeProduct(raw, ProductCategory.HDD));
+    expect(out.category).toBe(ProductCategory.FAN);
+    expect(out.subcategory).toBe('12cm 風扇');
+  });
+
+  it('HDMI 線型號含 HDD 字樣不可落入 HDD', () => {
+    const raw = 'JETART HDMI PREMIUM 2.0版影音傳輸 HDMI線-1.2M/4Kx2K/黑鉻金屬外殼+雙鍍金接頭/HDD2012AA';
+    expect(categorizeProduct(makeProduct(raw, ProductCategory.HDD)).category).not.toBe(ProductCategory.HDD);
+  });
+
+  it('Ti/XT 直接黏尾的顯卡型號要能被隱式 GPU 偵測抓到（不落 FAN）', () => {
+    const raw = '微星 RTX 5070Ti 16G GAMING TRIO OC (std:2580MHz/三風扇/註冊五年保/長33.8cm)';
+    expect(categorizeProduct(makeProduct(raw, ProductCategory.FAN)).category).toBe(ProductCategory.GPU);
+    const raw2 = '華碩 PRIME-RX9070XT-O16G-WHITE 白色 (std:3030MHz/三風扇/註冊五年保/長31.2cm)';
+    expect(categorizeProduct(makeProduct(raw2, ProductCategory.FAN)).category).toBe(ProductCategory.GPU);
+  });
+
+  it('型號內嵌瓦數的 PSU（UD750GM）與一體式水冷不可留在 FAN', () => {
+    const psu = '技嘉 UD750GM PG5 V2 (80+金牌/ATX3.1/PCIe 5.1/HYB靜音風扇/全模組/全日系/十年保)';
+    expect(categorizeProduct(makeProduct(psu, ProductCategory.FAN)).category).toBe(ProductCategory.PSU);
+    const aio = '華碩 TUF GAMING LC III 360 ARGB (360mm/ARGB冷頭/預裝風扇/一體式風扇/六年保固)';
+    expect(categorizeProduct(makeProduct(aio, ProductCategory.FAN)).category).toBe(ProductCategory.COOLER);
+  });
+
+  it('掌機（ROG ALLY / MSI Claw）歸 PACKAGE 整機', () => {
+    const ally = 'ASUS ROG XBOX ALLY 白 Ryzen Z2 A / 16G / 512G / Radeon / Wi-Fi 6E';
+    expect(categorizeProduct(makeProduct(ally, ProductCategory.NETWORK)).category).toBe(ProductCategory.PACKAGE);
+    const claw = '微星 Claw A8+ BZ2EM【012TW】Ryzen Z2 Extreme / 24G / 1TB / Radeon / Wi-Fi 7';
+    expect(categorizeProduct(makeProduct(claw, ProductCategory.NETWORK)).category).toBe(ProductCategory.PACKAGE);
+  });
+
+  it('印表機 / 無線充電座 / 無線耳麥不可留在 NETWORK', () => {
+    const printer = categorizeProduct(makeProduct('EPSON L3550 高速三合一 Wi-Fi(列印/影印/掃描)連續供墨複合機', ProductCategory.NETWORK));
+    expect(printer.category).not.toBe(ProductCategory.NETWORK);
+    const charger = categorizeProduct(makeProduct('Gigastone 23W 三合一摺疊式磁吸無線充電座【WP-9330G】', ProductCategory.NETWORK));
+    expect(charger.category).not.toBe(ProductCategory.NETWORK);
+    const headset = categorizeProduct(makeProduct('羅技G Pro X II 職業級無線電競耳麥 第二代/黑色/無線/Lightspeed', ProductCategory.NETWORK));
+    expect(headset.category).toBe(ProductCategory.HEADSET);
+  });
+
+  it('NETWORK 子分類拆分：攝影機 / NAS / Mesh / 網卡', () => {
+    expect(categorizeProduct(makeProduct('圓剛 PW315 高畫質定焦網路攝影機/AI人臉追蹤', ProductCategory.NETWORK)).subcategory).toBe('網路攝影機');
+    expect(categorizeProduct(makeProduct('Synology DS1823xs+【8Bay】AMD Ryzen V1780B 四核(3.35GHz)/8GB/10Gb*1', ProductCategory.NETWORK)).subcategory).toBe('NAS 網路儲存');
+    expect(categorizeProduct(makeProduct('華碩 ZENWIFI BT8 兩入組 (BE14000/Wi-Fi 7/三頻/MESH/隱藏八天線/2.5Gb)', ProductCategory.NETWORK)).subcategory).toBe('無線路由器 > Mesh 網狀');
+    expect(categorizeProduct(makeProduct('TP-LINK Archer TBE400E ( BE6500 / Wi-Fi 7 / 雙天線 / 藍牙5.4 / PCI-E)', ProductCategory.NETWORK)).subcategory).toBe('網路卡 / 接收器');
+  });
+
+  it('M.2 外接盒（USB10G 無容量）不可留在 SSD；USB10G 不可誤判為容量', () => {
+    const enclosure = categorizeProduct(makeProduct('華碩【M.2/USB10G】ROG Strix Arion Lite / NVMe / USB-C to C【ESD-S1C Lite】', ProductCategory.SSD));
+    expect(enclosure.category).not.toBe(ProductCategory.SSD);
+  });
+
+  it('HDD 監控碟獨立子分類；桌上型不再與監控混名', () => {
+    const sky = categorizeProduct(makeProduct('【監控鷹AI】Seagate 10TB (ST10000VE001) 256M/7200轉/五年保固/三年資料救援', ProductCategory.HDD));
+    expect(sky.subcategory).toMatch(/^監控碟 > /);
+    const desktop = categorizeProduct(makeProduct('Seagate 1TB【新梭魚】(256M/7200轉/3年保) (ST1000DM014)【限組裝】', ProductCategory.HDD));
+    expect(desktop.subcategory).toMatch(/^桌上型硬碟 > /);
+  });
+
+  it('加購優惠是條件價單品，不是組合', () => {
+    const raw = '【加購優惠】買 ASUS NUC DDR5系列準系統 加購 美光 NB 16G D5-5600 (一台限購1)';
+    const out = categorizeProduct(makeProduct(raw, ProductCategory.RAM));
+    expect(out.category).toBe(ProductCategory.RAM);
+    expect(out.specs?.priceCondition).toBe('加購價');
+  });
+
+  it('聯力 TL140 積木風扇歸 14cm；下吹式散熱器歸 COOLER', () => {
+    const fan = categorizeProduct(makeProduct('LIAN LI 聯力 UNI FAN TL 140 單入 ARGB積木風扇(需搭控制器)《黑》', ProductCategory.FAN));
+    expect(fan.category).toBe(ProductCategory.FAN);
+    expect(fan.subcategory).toBe('14cm 風扇');
+    const cooler = categorizeProduct(makeProduct('利民 AXP90-X47 黑化版 下吹式 (4導管/9cm風扇*1/高47mm)', ProductCategory.FAN));
+    expect(cooler.category).toBe(ProductCategory.COOLER);
+  });
+});
+
+describe('第十三輪：家具過濾', () => {
+  it('電競椅 / 電競桌 / 升降桌不可留在鍵盤或滑鼠分類', () => {
+    const chair = categorizeProduct(makeProduct('Cougar Explore Neo Royal F 電競椅/仿亞麻布椅面/可收納腳托/3D扶手', ProductCategory.KEYBOARD));
+    expect(chair.category).toBe(ProductCategory.OTHER);
+    const desk = categorizeProduct(makeProduct('irocks D01-SL-DX 電競桌-電動升降(北歐雲杉)/靜音雙馬達/乘重:100KG', ProductCategory.KEYBOARD));
+    expect(desk.category).toBe(ProductCategory.OTHER);
+  });
+});

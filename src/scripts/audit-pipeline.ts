@@ -140,6 +140,38 @@ const speakerMonitorPollution = db.prepare(`
     raw_name LIKE '%含喇叭%HDMI%' OR raw_name LIKE '%含喇叭%VA%' OR raw_name LIKE '%Smart M7%'
   )
 `).get() as { cnt: number };
+const hddNonDiskPollution = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category = 'hdd' AND (
+    raw_name LIKE '%耳機%' OR raw_name LIKE '%耳麥%' OR raw_name LIKE '%HDMI%' OR
+    raw_name LIKE '%RPM%' OR raw_name LIKE '%PWM%' OR raw_name LIKE '%風扇%' OR
+    raw_name LIKE '%燈效%' OR raw_name LIKE '%3Pin%'
+  )
+`).get() as { cnt: number };
+const fanNonFanPollution = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category = 'fan' AND (
+    raw_name LIKE '%RTX%' OR raw_name LIKE '%GTX%' OR raw_name LIKE '%水冷%' OR
+    raw_name LIKE '%一體式%' OR raw_name LIKE '%全模組%' OR raw_name LIKE '%集線器%' OR
+    raw_name LIKE '%支撐架%' OR raw_name LIKE '%千斤頂%' OR raw_name LIKE '%燈條%'
+  )
+`).get() as { cnt: number };
+const networkNonNetPollution = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category = 'network' AND (
+    raw_name LIKE '%印表機%' OR raw_name LIKE '%複合機%' OR raw_name LIKE '%連續供墨%' OR
+    raw_name LIKE '%充電座%' OR raw_name LIKE '%行動電源%' OR raw_name LIKE '%耳麥%' OR
+    raw_name LIKE '%耳機%' OR raw_name LIKE '%鍵鼠%' OR raw_name LIKE '%掌機%' OR
+    raw_name LIKE '%ALLY%' OR raw_name LIKE '%HDMI%'
+  )
+`).get() as { cnt: number };
+const furniturePollution = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category IN ('keyboard', 'mouse', 'speaker', 'cooler') AND (
+    raw_name LIKE '%電競椅%' OR raw_name LIKE '%電競桌%' OR raw_name LIKE '%升降桌%' OR
+    raw_name LIKE '%辦公椅%' OR raw_name LIKE '%工學椅%'
+  )
+`).get() as { cnt: number };
 const cpuExactSingletons = db.prepare(`
   SELECT COUNT(*) as cnt
   FROM products p
@@ -172,6 +204,10 @@ console.log(`Accessories in case: ${caseAccessoryPollution.cnt} (target: 0)`);
 console.log(`External HDD in ssd: ${ssdHddPollution.cnt} (target: 0)`);
 console.log(`Complete systems in ssd/cooler: ${systemResidue.cnt} (target: 0)`);
 console.log(`Monitors in speaker: ${speakerMonitorPollution.cnt} (target: 0)`);
+console.log(`Non-disk in hdd (headset/fan/cable): ${hddNonDiskPollution.cnt} (target: 0)`);
+console.log(`Non-fan in fan (gpu/psu/aio/accessory): ${fanNonFanPollution.cnt} (target: 0)`);
+console.log(`Non-network in network (printer/charger/handheld): ${networkNonNetPollution.cnt} (target: 0)`);
+console.log(`Furniture in peripherals (chair/desk): ${furniturePollution.cnt} (target: 0)`);
 console.log(`CPU exact duplicate singletons: ${cpuExactSingletons.cnt} (target: 0)`);
 console.log(`Exact duplicate split keys: ${exactDuplicateSplits} (target: 0)`);
 
@@ -222,6 +258,10 @@ const checks = [
   { name: 'SSD external-HDD pollution = 0', pass: ssdHddPollution.cnt === 0 },
   { name: 'System residue in SSD/COOLER = 0', pass: systemResidue.cnt === 0 },
   { name: 'Speaker monitor pollution = 0', pass: speakerMonitorPollution.cnt === 0 },
+  { name: 'HDD non-disk pollution = 0', pass: hddNonDiskPollution.cnt === 0 },
+  { name: 'FAN non-fan pollution = 0', pass: fanNonFanPollution.cnt === 0 },
+  { name: 'NETWORK non-network pollution = 0', pass: networkNonNetPollution.cnt === 0 },
+  { name: 'Furniture pollution = 0', pass: furniturePollution.cnt === 0 },
   { name: 'CPU exact duplicate singletons = 0', pass: cpuExactSingletons.cnt === 0 },
   { name: 'Exact duplicate split keys = 0', pass: exactDuplicateSplits === 0 },
   { name: 'Package false positive = 0', pass: packageFalsePos === 0 },

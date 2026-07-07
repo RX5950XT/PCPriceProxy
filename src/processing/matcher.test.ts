@@ -294,3 +294,61 @@ describe('matchProducts 比價分組', () => {
     expect(groups).toHaveLength(0);
   });
 });
+
+describe('第十三輪：HDD 規格鍵 / 料號鍵 / token 集合 exact key', () => {
+  function hdd(id: string, source: Source, rawName: string, name: string, price: number, brand = 'Seagate'): Product {
+    return { ...product(id, source, price), category: ProductCategory.HDD, rawName, name, brand, model: undefined };
+  }
+
+  it('三家不同寫法的同一顆內接碟以原廠料號合併（料號優先，可分 SATA/SAS）', () => {
+    const coolpc = hdd('c1', 'coolpc', 'Seagate 8TB【新梭魚】(256M/5400轉/3年保) (ST8000DM004)', 'Seagate 8TB', 9390);
+    const sinya = hdd('s1', 'sinya', '【新梭魚】Seagate 8TB 5400轉/256MB/3.5吋/三年保固 (ST8000DM004)', 'Seagate 8TB 5400轉', 9450);
+    const autobuy = hdd('a1', 'autobuy', 'Seagate 希捷 新梭魚 BarraCuda 8TB 5400轉 256MB SATA3 硬碟(ST8000DM004)☆9990元', 'Seagate 新梭魚 BarraCuda 8TB 5400轉', 9990);
+
+    const keys = [coolpc, sinya, autobuy].map(exactMatchKey);
+    expect(keys[0]).toBe('HDD-MPN-ST8000DM004');
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[1]).toBe(keys[2]);
+  });
+
+  it('同規格不同介面（SATA 017B vs SAS 018B）依料號分開', () => {
+    const sata = hdd('a1', 'autobuy', 'Seagate 希捷 企業號 8TB 3.5吋 7200轉 256M快取 SATA3 EXOS企業級硬碟(ST8000NM017B-5Y)', 'EXOS 8TB', 13990);
+    const sas = hdd('a2', 'autobuy', 'Seagate 希捷 Exos 7E10 8TB 3.5吋 7200轉 256M快取 SAS企業級硬碟(ST8000NM018B-5Y)', 'EXOS 7E10 8TB', 14990);
+    expect(exactMatchKey(sata)).not.toBe(exactMatchKey(sas));
+  });
+
+  it('無料號時退回「品牌+系列+容量+轉速」規格鍵', () => {
+    const a = hdd('c1', 'coolpc', 'Seagate 8TB【新梭魚】(256M/5400轉/3年保)【限組裝】', 'Seagate 8TB', 9390);
+    const b = hdd('s1', 'sinya', '【新梭魚】Seagate 8TB 5400轉/256MB/3.5吋/三年保固', 'Seagate 8TB 5400轉', 9450);
+    expect(exactMatchKey(a)).toBe('HDD-SPEC-SEAGATE-BARRACUDA-8T-5400');
+    expect(exactMatchKey(a)).toBe(exactMatchKey(b));
+  });
+
+  it('不同容量或轉速不可同鍵', () => {
+    const a = hdd('c1', 'coolpc', 'Seagate 8TB【新梭魚】(256M/5400轉/3年保)', 'Seagate 8TB', 9390);
+    const b = hdd('s1', 'sinya', '【新梭魚】Seagate 4TB 5400轉/256MB/3.5吋', 'Seagate 4TB', 5990);
+    const c = hdd('s2', 'sinya', '【新梭魚】Seagate 8TB 7200轉/256MB/3.5吋', 'Seagate 8TB 7200轉', 13890);
+    expect(exactMatchKey(a)).not.toBe(exactMatchKey(b));
+    expect(exactMatchKey(a)).not.toBe(exactMatchKey(c));
+  });
+
+  it('缺系列詞時退回原廠料號（Toshiba HDW*）', () => {
+    const a = hdd('c1', 'coolpc', 'Toshiba 2TB (256M/7200轉/3年保) (HDWD320UZSVA)【限組裝】', 'Toshiba 2TB', 4790, 'Toshiba');
+    const b = hdd('s1', 'sinya', '東芝 Toshiba 2TB 桌上型 (HDWD320UZSVA) 7200轉', 'Toshiba 2TB 7200轉', 4890, 'Toshiba');
+    expect(exactMatchKey(a)).toBeDefined();
+    expect(exactMatchKey(a)).toBe(exactMatchKey(b));
+  });
+
+  it('RAM exact key 對語序與通用詞（桌上型/筆記型記憶體、D5 縮寫）不敏感', () => {
+    const coolpc: Product = { ...product('c1', 'coolpc', 5299), category: ProductCategory.RAM, brand: 'Crucial', model: undefined, name: '美光16GB DDR5-5600 NB', rawName: '美光16GB DDR5-5600 NB' };
+    const sinya: Product = { ...product('s1', 'sinya', 6199), category: ProductCategory.RAM, brand: 'Crucial', model: undefined, name: 'Micron Crucial NB DDR5-5600 16G 美光筆記型記憶體', rawName: 'Micron Crucial NB DDR5-5600 16G 美光筆記型記憶體' };
+    expect(exactMatchKey(coolpc)).toBeDefined();
+    expect(exactMatchKey(coolpc)).toBe(exactMatchKey(sinya));
+  });
+
+  it('RAM 單條與雙條套件（16G*2）不可同鍵', () => {
+    const single: Product = { ...product('c1', 'coolpc', 3250), category: ProductCategory.RAM, brand: 'Crucial', model: undefined, name: 'Crucial DDR5-5600 32G 桌上型記憶體', rawName: 'Crucial DDR5-5600 32G' };
+    const kit: Product = { ...product('s1', 'sinya', 6400), category: ProductCategory.RAM, brand: 'Crucial', model: undefined, name: 'Crucial DDR5-5600 16G*2 桌上型記憶體', rawName: 'Crucial DDR5-5600 16G*2' };
+    expect(exactMatchKey(single)).not.toBe(exactMatchKey(kit));
+  });
+});

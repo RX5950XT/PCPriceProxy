@@ -72,8 +72,8 @@ export const KNOWN_BRANDS = [
   'ASUS', 'MSI', 'GIGABYTE', 'ASRock', 'BIOSTAR',
   // 記憶體
   'Corsair', 'G.SKILL', 'Kingston', 'Crucial', 'TEAMGROUP', 'ADATA', 'Apacer', 'Patriot', 'Klevv',
-  // 儲存
-  'Samsung', 'WD', 'Seagate', 'Micron', 'KIOXIA', 'SanDisk', 'Solidigm',
+  // 儲存（Micron 為 Crucial 母公司，統一正規化為 Crucial 避免同 SKU 品牌碎裂）
+  'Samsung', 'WD', 'Seagate', 'Toshiba', 'KIOXIA', 'SanDisk', 'Solidigm',
   // 顯卡 AIB
   'EVGA', 'ZOTAC', 'Sapphire', 'PowerColor', 'XFX', 'PNY', 'Leadtek', 'Inno3D', 'Palit', 'Gainward', 'GALAX', 'COLORFUL', 'Maxsun',
   // 電源 / 機殼 / 散熱
@@ -103,6 +103,8 @@ export const BRAND_ALIASES: Record<string, string> = {
   'T-FORCE': 'TEAMGROUP',
   '宇瞻': 'Apacer',
   '美光': 'Crucial',
+  'MICRON': 'Crucial',
+  '東芝': 'Toshiba',
   '金士頓': 'Kingston',
   '影馳': 'GALAX',
   '撼訊': 'PowerColor',

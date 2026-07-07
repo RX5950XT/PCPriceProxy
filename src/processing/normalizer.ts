@@ -32,8 +32,8 @@ export function normalizeName(rawName: string, category?: ProductCategory): stri
   // 4) 標記符號
   s = s.replace(/[↘↗↓↑★☆●◆◇■□▲△▽▼✦✧➤«»~]/g, ' ');
 
-  // 4b) 搭購折扣註記（任搭/搭到 NNN）
-  s = s.replace(/任搭\s*\d*|搭到\s*\d+|搭\s*\d+\s*元?省/g, ' ');
+  // 4b) 搭購折扣註記（任搭/搭到 NNN/搭機價；購買條件已由 specs.priceCondition 記錄）
+  s = s.replace(/任搭\s*\d*|搭到\s*\d+|搭\s*\d+\s*元?省|搭機價|限組裝|組裝價/g, ' ');
 
   // 5) 行銷話術 / 保固 / 通路詞（非核心識別）
   s = s.replace(
@@ -316,6 +316,8 @@ function chooseBrand(
   category: ProductCategory,
 ): string | undefined {
   if (!current) return extracted;
+  // 既有品牌若為別名（如 Micron），正規化為 canonical（Crucial），避免同 SKU 跨店品牌碎裂
+  current = BRAND_ALIASES[current.toUpperCase().trim()] ?? current;
   if (
     extracted
     && extracted !== current

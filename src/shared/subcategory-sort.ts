@@ -11,6 +11,10 @@ const GPU_SERIES_ORDER: readonly string[] = [
   'Intel Arc 系列', 'NVIDIA 專業繪圖卡', 'AMD 專業繪圖卡',
 ];
 
+const HDD_TYPE_ORDER: readonly string[] = ['桌上型硬碟', 'NAS 專用碟', '監控碟', '企業級硬碟', '行動外接硬碟'];
+const NETWORK_ORDER: readonly string[] = ['無線路由器', '網路卡 / 接收器', '交換器', 'NAS 網路儲存', '網路攝影機', '網路線材', '其他網通設備'];
+const FAN_ORDER: readonly string[] = ['12cm 風扇', '14cm 風扇', '8/9cm 小風扇', '其他尺寸風扇'];
+
 const DDR_ORDER: readonly string[] = ['DDR5', 'DDR4', 'D5', 'D4'];
 const DEVICE_ORDER: readonly string[] = ['桌上型 UDIMM', '桌上型', '筆電用 SO-DIMM', '筆電用'];
 const SIZE_ORDER: readonly string[] = ['E-ATX', 'ATX', 'Micro-ATX', 'Mini-ITX'];
@@ -63,6 +67,9 @@ function semanticRank(category: string, value: string): number {
   if (category === ProductCategory.CPU) return cpuRank(value);
   if (category === ProductCategory.MOTHERBOARD) return orderedRank(value, CHIPSET_ORDER);
   if (category === ProductCategory.GPU) return orderedRank(value, GPU_SERIES_ORDER);
+  if (category === ProductCategory.HDD) return orderedRank(value, HDD_TYPE_ORDER);
+  if (category === ProductCategory.NETWORK) return orderedRank(value, NETWORK_ORDER);
+  if (category === ProductCategory.FAN) return orderedRank(value, FAN_ORDER);
 
   const ddrRank = orderedRank(value, DDR_ORDER);
   if (ddrRank !== Number.MAX_SAFE_INTEGER) return ddrRank;

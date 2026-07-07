@@ -3,8 +3,25 @@
 ## 專案現況
 PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。
 
-## 系統運作狀態（已驗證，2026-07-05）
-資料流：scrape → normalize → categorize → **diy-filter** → match → `products` / `match_groups`。三家 live scrape 與 `scrape:test` 正常（live scheduler：coolpc 5804 / sinya 4158 / autobuy 3616；scrape:test：coolpc 6727 / sinya 5002 / autobuy 3753，errors 0，輸出 source category 與 pipeline category）。目前 live DB **15,806 件商品**、**14,182 張商品卡**、**1,167 組跨店比價**、20 個主分類都有 match group，**OTHER=0**、價差異常 0。最新 audit 來源件數：coolpc 6735 / sinya 5371 / autobuy 3700；GPU system residue=0、GPU model collision=0、Legacy CPU generation nodes=0、CPU exact duplicate singletons=0、Exact duplicate split keys=0、Package false positive=0、Price anomalies=0。
+## 系統運作狀態（已驗證，2026-07-07）
+資料流：scrape → normalize → categorize → **diy-filter** → match → `products` / `match_groups`。三家 live scrape 正常（2026-07-07 即時重爬：coolpc 6529 / sinya 5514 / autobuy 3714，errors 0）。目前 live DB **15,757 件商品**、**13,825 張商品卡**、**1,358 組跨店比價**（第十二輪 1,167 → +16%）、20 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **22 項檢查全 PASS**（本輪新增 HDD non-disk / FAN non-fan / NETWORK non-network / Furniture 四項污染檢查）。`npm run test` 72 tests、`npm run build` 通過。dev server 開在 `http://localhost:3000`（背景 `npx tsx src/index.ts`）。
+
+### 第十三輪重點（側欄分類準確化 + 儲存/RAM 合併鍵）
+- **側欄大掃除（audit 抓不到的真實污染）**：
+  * HDD 藏了 Razer Barracuda（梭魚）耳機（`BARRACUDA` 誤中）、「1600 RPM」風扇（`\bRPM\b` 誤中）、HDMI 線（型號 `HDD2012AA`）→ `looksLikeHdd` 拿掉 RPM 改用「N轉」、excludes 補 耳機/RAZER/HDMI/PWM/ARGB/入組/3Pin/燈效；新增**隱式風扇偵測**（3/4Pin+RPM）接住 Noctua FLX。
+  * FAN 藏了 GPU（`RTX 5070Ti`/`RX9070XT` 黏尾使 `\b` 失效→改 `(?!\d)`）、PSU（UD750GM 無獨立瓦數 token→`looksLikePsu` 支援認證+模組化雙訊號）、AIO/集線器/燈條 → 新增 `isFanContaminated`；尺寸從型號抓 120/140（TF120/TL140），「其他尺寸」545→176。
+  * NETWORK 藏了印表機/無線充電座/無線耳麥/鍵鼠組/掌機 → 新增 `isNetworkContaminated`；掌機（ALLY/Claw/Steam Deck/Legion Go+儲存簽章）歸 PACKAGE；「其他網通」694→288，拆出 網路攝影機/Mesh/路由器/網卡接收器/NAS/線材。
+  * KEYBOARD 藏了 277 件電競椅/電競桌 → 新增 `isKeyboardContaminated`（家具），注意 Cooler Master 電競桌重判時品牌名會再誤中 COOLER 關鍵字，keyword 迴圈也要套過濾。
+  * SSD「PCIe 4.0 > 10GB」假容量節點＝USB10G 外接盒 → 無容量的 USB10G/雙模判外接盒；容量抽取先剝 USB 頻寬。
+  * HDD 子分類拆 桌上型硬碟/NAS 專用碟/監控碟/企業級硬碟/行動外接硬碟；`subcategory-sort.ts` 補 HDD/NETWORK/FAN 語意排序。
+- **合併鍵強化（matcher）**：
+  * HDD：三家內接碟品名都附**原廠料號**（ST8000DM004/WD20EZBX/HDWD320UZSVA）→ `HDD-MPN-*` 最優先（能分 SATA 017B vs SAS 018B）；缺料號退規格鍵 `HDD-SPEC-品牌-系列-容量-轉速`（`HDD_SERIES` 中英正規化：新梭魚=BarraCuda、藍標=BLUE、監控鷹=SkyHawk）；外接碟無轉速自然交 NAME/fuzzy。
+  * `exactNameIdentity` 改 **token 集合**：英數連續段一 token、中文逐字、去重、排序——語序與中英黏接不再擋合併（「美光16GB DDR5-5600 NB」=「Micron Crucial NB DDR5-5600 16G 筆記型記憶體」）。RAM 另 canonical：D5→DDR5、16G*2→16GX2、筆記型/SO-DIMM→NB、剝桌上型/記憶體/CL 時序。
+  * RAM key 追加 `ramKeyExtras(rawName)`：產品線（KVR≠FURY Beast；`RAM_LINES` 中英表）+ 雙條 KIT2——這些判別在括號內會被 `normalizeName` 剝掉，**key 一律回 raw_name 抽**。
+  * `detectPriceCondition` 補「加購優惠→加購價」（coolpc 加購 RAM 不再污染跨店比價）。
+  * 品牌：Micron→Crucial 統一、新增 Toshiba/東芝；`chooseBrand` 對既有 brand 也走別名正規化。
+- **成效**：跨店組 1,167→1,358；RAM 跨店 17→33 組、FAN 1→98 組、HDD 0.2%→1.8%（可比池小：coolpc HDD 幾乎全限組裝被排除）；EXOS SATA/SAS、KVR/FURY、單條/雙通皆正確分開，價差異常=0。
+- **驗證**：`npm run test` 72、`npm run build`、`clean-and-rebuild`、`npm run audit` 22 項全 PASS、三家 live 重爬 + API 抽樣（HDD 跨店卡、network/hdd 子分類樹）全通過。
 
 ### 第十二輪重點（跨店相同商品落單收斂）
 - **全庫策略**：不只看 exact split，另跑「跨來源、同分類品牌、相近價位、高相似標題但不同 match group」候選，逐批分辨真落單與不同 SKU。最終 live audit 全 PASS：`Exact duplicate split keys=0`、`Price anomalies=0`、污染檢查全 0。
@@ -138,7 +155,8 @@ npx tsx src/scripts/clean-and-rebuild.ts  # 用最新分類邏輯清洗既有 DB
 ```
 
 ## 已知限制 / 後續可做
-- **跨店比對命中率偏低**（15,307 件僅 213 組跨店）：matcher 依賴 brand+model 精確配對或 Jaccard≥0.6 模糊配對，多數商品未抽出 model。可強化 `normalizer.extractModel` 或改善 fuzzy 鍵以提升比價覆蓋。
+- **跨店率天花板**：目前 1,358 組（8.7%）。剩餘落單多為真實單店獨賣或 coolpc 限組裝（條件價被刻意排除比價）；HDD 可比池尤小（coolpc HDD 幾乎全限組裝）。若要再提升，方向是 SSD/MONITOR 的型號規格鍵（比照 HDD 料號策略）。
+- **HDD 規格鍵不含快取容量**（64M/256M）：同系列同容量同轉速視為同 SKU；若未來出現誤併再把快取加入鍵。
 - `npm run build` 後 `node dist/index.js` 會因找不到 `dist/storage/schema.sql` 失敗（tsc 不複製非 .ts）；Dockerfile / 啟動腳本需另複製 schema.sql。
 - 開發時 tsx watch 會在每次存檔後重啟並重爬；批次改完再驗證，避免重複爬取與 DB 鎖。
 

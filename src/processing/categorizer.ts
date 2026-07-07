@@ -14,13 +14,13 @@ const CATEGORY_KEYWORDS: Record<ProductCategory, readonly string[]> = {
   [ProductCategory.HDD]: ['傳統硬碟', '硬碟', 'HDD', 'Hard Drive'],
   [ProductCategory.PSU]: ['電源供應器', '電源', 'Power Supply', 'PSU'],
   [ProductCategory.CASE]: ['機殼', 'Case', 'Chassis'],
-  [ProductCategory.COOLER]: ['散熱器', 'CPU散熱', 'Cooler', 'AIO', '水冷', '空冷', '塔散'],
+  [ProductCategory.COOLER]: ['散熱器', 'CPU散熱', 'Cooler', 'AIO', '水冷', '空冷', '塔散', '下吹式', '導管', '一體式'],
   [ProductCategory.MONITOR]: ['螢幕', '顯示器', 'Monitor', '電競螢幕'],
-  [ProductCategory.KEYBOARD]: ['鍵盤', 'Keyboard'],
+  [ProductCategory.KEYBOARD]: ['鍵盤', '鍵鼠組', 'Keyboard'],
   [ProductCategory.MOUSE]: ['滑鼠', 'Mouse'],
-  [ProductCategory.HEADSET]: ['耳機', 'Headset', 'Headphone'],
+  [ProductCategory.HEADSET]: ['耳機', '耳麥', 'Headset', 'Headphone'],
   [ProductCategory.SPEAKER]: ['喇叭', 'Speaker'],
-  [ProductCategory.FAN]: ['風扇', 'Fan'],
+  [ProductCategory.FAN]: ['風扇', 'Fan', 'PWM'],
   [ProductCategory.OPTICAL_DRIVE]: ['光碟機', '燒錄機', 'Optical', 'DVD', 'Blu-ray'],
   [ProductCategory.NETWORK]: ['網路', '無線', 'Router', 'Wi-Fi', 'NAS'],
   [ProductCategory.OS]: ['作業系統', 'Windows', 'OS'],
@@ -115,6 +115,8 @@ export function isRamContaminated(name: string): boolean {
 
 export function isSsdContaminated(name: string): boolean {
   const upper = name.toUpperCase();
+  // M.2 外接盒（Arion/Cobble 等）：有 USB10G/雙模訊號但無任何真實容量 → 非 SSD 本體
+  if (/USB\s*10G|雙模/i.test(name) && !/\d+(?:\.\d+)?\s*TB|(?<!USB\s?)\b\d{3,4}\s*G+B?\b/i.test(name)) return true;
   const excludes = [
     '筆電', '工作站', '工作主機', '外接盒', '散熱片', '散熱貼', '導熱', '主機板', '準系統',
     '外接座', '轉接卡', '轉接線', '螺絲', '外接硬碟', '行動硬碟', '硬碟儲存',
@@ -126,7 +128,9 @@ export function isSsdContaminated(name: string): boolean {
 export function isHddContaminated(name: string): boolean {
   const upper = name.toUpperCase();
   const excludes = [
-    '外接盒', '轉接', '托架', '排線', '連接器', '防震包', '收納', 'SSD', '固態硬碟', '防震盒'
+    '外接盒', '轉接', '托架', '排線', '連接器', '防震包', '收納', 'SSD', '固態硬碟', '防震盒',
+    // Razer Barracuda（梭魚）耳機、HDMI 線（型號含 HDD 字樣）、風扇（RPM / PWM / 3Pin / 燈效 / N入組）不可落入 HDD
+    '耳機', '耳麥', 'RAZER', '雷蛇', 'HDMI', '傳輸線', '風扇', '鍵盤', '滑鼠', 'PWM', 'ARGB', '入組', '3PIN', '燈效'
   ];
   return excludes.some(ex => upper.includes(ex));
 }
@@ -163,6 +167,26 @@ export function isCaseContaminated(name: string): boolean {
   return /TRAVEL\s*CASE|ALLY|掌機|收納|保護包|保護套|防潑水|攜行包|包$/.test(upper);
 }
 
+/** KEYBOARD 來源常混入電競椅/電競桌/升降桌等家具（非 DIY 零件，過濾後由 diy-filter 移除）。 */
+export function isKeyboardContaminated(name: string): boolean {
+  return /電競椅|電競桌|升降桌|電腦桌|辦公椅|工學椅|沙發|椅墊|腳托|桌墊超值組/i.test(name);
+}
+
+/** FAN 來源常混入水冷、GPU（三風扇規格）、PSU、集線器/燈條/延長線等配件。 */
+export function isFanContaminated(name: string): boolean {
+  if (/水冷|一體式|\bAIO\b|下吹式|導管|塔散/i.test(name)) return true; // AIO 與 CPU 散熱器
+  if (RE_GPU_MODEL.test(name)) return true; // 顯卡以「三風扇」規格誤中 FAN 關鍵字
+  if (looksLikePsu(name)) return true;
+  if (/集線器|延長線|串接線|排線|擴充線|燈條|燈效套件|支撐架|千斤頂|散熱膏|轉接/i.test(name)) return true;
+  if (/螢幕|LCD液晶/i.test(name) && !/風扇|\bFAN\b/i.test(name)) return true;
+  return false;
+}
+
+/** NETWORK 來源常混入印表機、無線充電座、無線耳麥、無線鍵鼠組、掌機、HDMI 線等「無線/Wi-Fi」誤中品。 */
+export function isNetworkContaminated(name: string): boolean {
+  return /印表機|複合機|事務機|連續供墨|充電座|充電盤|充電器|行動電源|耳機|耳麥|鍵鼠|鍵盤|掌機|ALLY|CLAW\s*A\d|HDMI|傳輸線/i.test(name);
+}
+
 /**
  * 偵測「搭板 / 組裝 / 限組裝」等條件式定價標記。
  * 注意：這是「單品的購買條件」而非「多件商品組合」——單品（如限組裝硬碟、搭板價主機板）
@@ -173,13 +197,15 @@ export function detectPriceCondition(name: string): string | null {
   if (/組裝價/.test(name)) return '組裝價';
   if (/搭板|搭版|任搭主機板|任搭板|任搭CPU|板U價|搭機價/.test(name)) return '搭板價';
   if (/搭購價|搭購優惠|套裝搭購|U版專案/.test(name)) return '搭購價';
+  if (/加購優惠|限加購|加購價/.test(name)) return '加購價';
   return null;
 }
 
 // CPU 型號正則（含尾碼如 9800X3D / 9500F / Core 5 210H），供整機 / 筆電 簽章判定
 const RE_CPU_MODEL = /Ryzen\s*(AI\s*)?[3579]|Core\s*(Ultra\s*)?[3579]|Core\s*[3579]\s*\d{2,3}H|Core\s*Ultra|\bC[3579][\s-]?\d{3}H\b|\b[ui][3579][\s-]?\d{3,5}[A-Z0-9]{0,3}|\bR[3579][\s-]?\d{3,4}[A-Z0-9]{0,4}|Ultra\s*[3579]\s*\d|Threadripper|\bN[12]\d{2}\b|\bG\d{4}\b/i;
 const RE_STORAGE = /\b\d{3}\s?G(?:B)?\b|\b\d\s?T(?:B)?\b|\bSSD\b|512G|PCIe|M\.2/i;
-const RE_GPU_MODEL = /\b(RTX|GTX|GT)\s?\d{3,4}\b|\bRX\s?\d{3,4}\b|\bArc\s?[AB]\d{3}\b/i;
+// 型號數字後不可用 \b：「RTX 5070Ti / RX9070XT」的 Ti/XT 直接黏尾會使 \b 失效而漏判
+const RE_GPU_MODEL = /\b(RTX|GTX|GT)\s?\d{3,4}(?!\d)|\bRX\s?\d{3,4}(?!\d)|\bArc\s?[AB]\d{3}(?!\d)/i;
 
 const INTEL_CHIPSETS = ['Z890', 'W890', 'Z790', 'W790', 'B860', 'B760', 'H810', 'H610', 'W680', 'B660'] as const;
 const AMD_CHIPSETS = ['X870E', 'X870', 'WRX90', 'TRX50', 'B850', 'B840', 'X670E', 'X670', 'B650E', 'B650', 'A620', 'B550', 'A520'] as const;
@@ -226,8 +252,9 @@ export function isRealBundle(name: string): boolean {
   // 加購優惠是單品搭售條件，不是組合本體
   if (/【加購優惠】|^加購優惠/.test(name)) return false;
 
-  // 1. 完整成品系統 / 筆電 / 準系統 / 迷你 PC
+  // 1. 完整成品系統 / 筆電 / 準系統 / 迷你 PC / 掌機
   if (isLaptop(name)) return true;
+  if (/掌機|ROG\s*(?:XBOX\s*)?ALLY|CLAW\s*A\d|STEAM\s*DECK|LEGION\s*GO/i.test(name) && RE_STORAGE.test(name)) return true;
   if (/準系統|迷你主機|迷你電腦|MINI\s*PC|\bNUC\b|\bCUBI\b|\bBRIX\b|DeskMini|DeskMeet|品牌電腦|品牌機|套裝電腦|套裝主機|桌上型主機|桌上型電腦|電競電腦|欣亞PC|整機/i.test(name)) return true;
   if (isPrebuiltSystem(name)) return true;
   if (isAiWorkstationSystem(name)) return true;
@@ -266,7 +293,11 @@ export function looksLikePsu(name: string): boolean {
   if (isPsuContaminated(name)) return false;
   const hasWatt = /\b\d{3,4}\s?W\b/i.test(name);
   const hasSig = /\b(8\d|9[0-2])\s*[+＋]|金牌|銅牌|白金牌|鈦金|銀牌|白牌|PLATINUM|GOLD|BRONZE|TITANIUM|全模組|半模組|直出|ATX\s*3\.|\bSFX\b|12VHPWR/i.test(name);
-  return hasWatt && hasSig;
+  if (hasWatt && hasSig) return true;
+  // 瓦數藏在型號（UD750GM）而無獨立「750W」token 時，以「認證 + 模組化/ATX3」雙訊號判定
+  const hasRating = /金牌|銅牌|白金|鈦金|銀牌|白牌|PLATINUM|GOLD|BRONZE|TITANIUM/i.test(name);
+  const hasPsuForm = /全模組|半模組|直出|ATX\s*3\.|12VHPWR/i.test(name);
+  return hasRating && hasPsuForm;
 }
 
 /** 隱式固態硬碟偵測：品名無「SSD」字但具 SSD 簽章（讀寫速度 + TLC/QLC 或 Gen PCIe + M.2/2.5吋，且非機械碟）。 */
@@ -279,7 +310,8 @@ export function looksLikeSsd(name: string): boolean {
 
 export function looksLikeHdd(name: string): boolean {
   if (isHddContaminated(name)) return false;
-  return /(7200|5400)\s*轉|\bRPM\b|IRONWOLF|那嘶狼|紅標|EXOS|BARRACUDA|SKYHAWK|WD\s*(RED|PURPLE|GOLD)|外接硬碟|行動硬碟|MY\s*BOOK|EXPANSION\s*DESKTOP|新黑鑽|雙硬碟儲存/i.test(name);
+  // 不可用 \bRPM\b：機殼風扇「1600 RPM」會誤中；HDD 台灣通路一律寫「N轉」
+  return /(7200|5400|5640|5900)\s*轉|IRONWOLF|那嘶狼|紅標|EXOS|BARRACUDA|SKYHAWK|WD\s*(RED|PURPLE|GOLD)|外接硬碟|行動硬碟|MY\s*BOOK|EXPANSION\s*DESKTOP|新黑鑽|雙硬碟儲存/i.test(name);
 }
 
 export function looksLikeMotherboard(name: string): boolean {
@@ -322,6 +354,11 @@ export function detectCategory(name: string): ProductCategory {
   // 隱式硬碟偵測：含轉速 / NAS 碟暱稱等 HDD 專屬訊號（SSD 永遠沒有轉速）
   if (looksLikeHdd(name)) {
     return ProductCategory.HDD;
+  }
+
+  // 隱式風扇偵測：品名無「風扇」字但具 3/4Pin 接頭 + RPM 轉速簽章（Noctua FLX 等）
+  if (!isFanContaminated(name) && /[34]\s*PIN/i.test(name) && /\bRPM\b/i.test(name)) {
+    return ProductCategory.FAN;
   }
 
   // 隱式顯卡偵測：型號帶 RTX/GTX/RX/Arc 但品名無「顯示卡」字樣
@@ -392,6 +429,9 @@ export function detectCategory(name: string): ProductCategory {
         if (category === ProductCategory.SPEAKER && isSpeakerContaminated(name)) continue;
         if (category === ProductCategory.OS && isOsContaminated(name)) continue;
         if (category === ProductCategory.MONITOR && isMonitorContaminated(name)) continue;
+        if (category === ProductCategory.FAN && isFanContaminated(name)) continue;
+        if (category === ProductCategory.NETWORK && isNetworkContaminated(name)) continue;
+        if ([ProductCategory.KEYBOARD, ProductCategory.MOUSE, ProductCategory.SPEAKER, ProductCategory.COOLER].includes(category) && isKeyboardContaminated(name)) continue;
 
         return category;
       }
@@ -761,7 +801,9 @@ function detectSsdSubcategory(name: string): string | null {
   }
 
   let cap: string | null = null;
-  const capMatch = name.match(/(\d+)\s*(GB|TB|G|T)(?=\s|$|\/|\b)/i);
+  // 先剝 USB 頻寬（USB10G / USB3.2）再抽容量，避免外接介面數字被誤判為容量
+  const capSource = name.replace(/USB\s*\d+(?:\.\d+)?\s*G?/gi, ' ');
+  const capMatch = capSource.match(/(\d+)\s*(GB|TB|G|T)(?=\s|$|\/|\b)/i);
   if (capMatch) {
     cap = `${capMatch[1]}${capMatch[2].toUpperCase().startsWith('T') ? 'TB' : 'GB'}`;
   }
@@ -786,11 +828,13 @@ function detectSsdSubcategory(name: string): string | null {
 function detectHddSubcategory(name: string): string | null {
   const upperName = name.toUpperCase();
 
-  let type = '一般監控/桌上型';
+  let type = '桌上型硬碟';
   if (/\b(外接|行動|Expansion|One Touch|Backup)\b/i.test(name) || upperName.includes('外接硬碟') || upperName.includes('行動硬碟')) {
     type = '行動外接硬碟';
   } else if (/\b(NAS|紅標|Red|那嘶狼|IronWolf)\b/i.test(name) || upperName.includes('NAS') || upperName.includes('那嘶狼')) {
     type = 'NAS 專用碟';
+  } else if (/監控|SKYHAWK|紫標|PURPLE/i.test(name)) {
+    type = '監控碟';
   } else if (/\b(企業|Enterprise|EXOS|銀標)\b/i.test(name) || upperName.includes('企業級') || upperName.includes('EXOS')) {
     type = '企業級硬碟';
   }
@@ -973,16 +1017,21 @@ export function detectSubcategory(category: ProductCategory, name: string): stri
   }
 
   if (category === ProductCategory.FAN) {
-    if (upperName.includes('12CM') || upperName.includes('120MM') || upperName.includes('120 ARGB')) return '12cm 風扇';
-    if (upperName.includes('14CM') || upperName.includes('140MM') || upperName.includes('140 ARGB')) return '14cm 風扇';
+    // 台灣通路慣把尺寸藏在型號（TF120 / MR120 / TL140 / TR120）；用「非數字前後界」抓 120/140
+    if (/12\s*CM|120(?!\d)/i.test(name)) return '12cm 風扇';
+    if (/14\s*CM|140(?!\d)/i.test(name)) return '14cm 風扇';
+    if (/(?<!\d)[89]\s*CM\b|(?<!\d)(?:80|92)\s*MM\b/i.test(name)) return '8/9cm 小風扇';
     return '其他尺寸風扇';
   }
 
   if (category === ProductCategory.NETWORK) {
-    if (upperName.includes('分享器') || upperName.includes('ROUTER') || upperName.includes('無線分享器')) return '無線路由器';
-    if (upperName.includes('網路卡') || upperName.includes('網卡') || upperName.includes('LAN CARD')) return '網路卡';
-    if (upperName.includes('交換器') || upperName.includes('SWITCH') || upperName.includes('HUB')) return '交換器';
-    if (upperName.includes('NAS')) return 'NAS 網路儲存';
+    if (/攝影機|WEBCAM|視訊鏡頭/i.test(name)) return '網路攝影機';
+    if (/MESH|ZENWIFI|VELOP|\bDECO\b/i.test(name)) return '無線路由器 > Mesh 網狀';
+    if (/路由器|分享器|ROUTER/i.test(name)) return '無線路由器';
+    if (/PCE-|PCI-?E|網路卡|網卡|LAN\s*CARD|藍牙接收|藍芽接收|USB.{0,8}(藍牙|藍芽|WI-?FI)/i.test(name)) return '網路卡 / 接收器';
+    if (/交換器|SWITCH|\bHUB\b/i.test(name)) return '交換器';
+    if (/NAS|SYNOLOGY|群暉|QNAP|威聯通|華芸|ASUSTOR|DISKSTATION/i.test(name)) return 'NAS 網路儲存';
+    if (/網路線|CAT\.?\s*[5-8]/i.test(name)) return '網路線材';
     return '其他網通設備';
   }
 
@@ -1036,8 +1085,11 @@ export function categorizeProduct(product: Product): Product {
   else if (cat === ProductCategory.SPEAKER && isSpeakerContaminated(raw)) needsRecategorize = true;
   else if (cat === ProductCategory.OS && isOsContaminated(raw)) needsRecategorize = true;
   else if (cat === ProductCategory.MONITOR && isMonitorContaminated(raw)) needsRecategorize = true;
-  // 僅以晶片組命名的主機板常因「無線/Wi-Fi」被誤分到 NETWORK，強制重判
-  else if (cat === ProductCategory.NETWORK && looksLikeMotherboard(raw)) needsRecategorize = true;
+  else if (cat === ProductCategory.FAN && isFanContaminated(raw)) needsRecategorize = true;
+  // 鍵盤/滑鼠/喇叭/散熱來源的電競椅、電競桌、升降桌等家具強制重判（重判後落 OTHER 由 diy-filter 移除）
+  else if ([ProductCategory.KEYBOARD, ProductCategory.MOUSE, ProductCategory.SPEAKER, ProductCategory.COOLER].includes(cat) && isKeyboardContaminated(raw)) needsRecategorize = true;
+  // NETWORK：晶片組主機板（無線/Wi-Fi 誤中）與印表機/充電座/耳麥/鍵鼠/掌機等非網通品強制重判
+  else if (cat === ProductCategory.NETWORK && (looksLikeMotherboard(raw) || isNetworkContaminated(raw))) needsRecategorize = true;
 
   if (needsRecategorize) {
     cat = detectCategory(raw);

@@ -22,8 +22,94 @@ export function exactMatchKey(p: Product): string | undefined {
     if (sku) return `GPU-${p.brand}-${sku}`.toUpperCase().replace(/\s+/g, '');
     return undefined;
   }
+  // HDD：三家顯示名格式差異過大（coolpc 截到只剩「品牌+容量」）。三家內接碟品名皆附原廠料號
+  // （ST8000DM004 / WD20EZBX / HDWD320UZSVA），料號全球唯一、最優先；缺料號才退規格鍵
+  // （品牌+系列+容量+轉速——注意規格鍵無法分 SATA/SAS 介面差異，料號可以）。
+  if (p.category === ProductCategory.HDD) {
+    const mpn = hddMpn(p.rawName);
+    if (mpn) return `HDD-MPN-${mpn}`;
+    const spec = hddSpecKey(p);
+    if (spec) return spec;
+  }
   if (p.category === ProductCategory.PACKAGE || !p.name || p.name.length < 8) return undefined;
-  return `NAME-${p.category}-${p.brand ?? ''}-${exactNameIdentity(p.name, p.brand, p.category)}`.toUpperCase().replace(/\s+/g, '');
+  const extras = p.category === ProductCategory.RAM ? ramKeyExtras(p.rawName) : '';
+  return `NAME-${p.category}-${p.brand ?? ''}-${exactNameIdentity(p.name, p.brand, p.category)}${extras}`.toUpperCase().replace(/\s+/g, '');
+}
+
+// RAM 產品線（同品牌同規格的不同線材價差大：ValueRAM vs FURY Beast）；中文別名正規化，長者排前
+const RAM_LINES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/FURY\s*BEAST|獸獵者/i, 'FURYBEAST'],
+  [/FURY\s*RENEGADE|RENEGADE|叛徒/i, 'RENEGADE'],
+  [/FURY\s*IMPACT|IMPACT/i, 'IMPACT'],
+  [/TRIDENT\s*Z5|幻鋒戟/i, 'TRIDENTZ5'],
+  [/TRIDENT|三叉戟/i, 'TRIDENT'],
+  [/RIPJAWS|焰刃/i, 'RIPJAWS'],
+  [/VENGEANCE|復仇者/i, 'VENGEANCE'],
+  [/DOMINATOR|統治者/i, 'DOMINATOR'],
+  [/T-?CREATE\s*EXPERT/i, 'TCREATEEXPERT'],
+  [/DELTA/i, 'DELTA'],
+  [/VULCAN|火神/i, 'VULCAN'],
+  [/LANCER\s*BLADE/i, 'LANCERBLADE'],
+  [/LANCER/i, 'LANCER'],
+  [/CLASSIC/i, 'CLASSIC'],
+  [/CRUCIAL\s*PRO|美光PRO/i, 'CRUCIALPRO'],
+];
+
+/**
+ * RAM 額外判別鍵：產品線 + 雙條套件。這些資訊常在括號內被 normalizeName 剝除
+ * （KVR32N22D8 vs KF432C16BB、「雙通16GB*2」），導致不同 SKU 顯示名相同，須從 raw_name 補回。
+ */
+function ramKeyExtras(rawName: string): string {
+  const line = RAM_LINES.find(([re]) => re.test(rawName))?.[1] ?? '';
+  const kit = /(\d+)\s*GB?\s*[*X×]\s*2|雙通/i.test(rawName) ? 'KIT2' : '';
+  return `-${line}-${kit}`;
+}
+
+// 原廠料號（MPN）樣式：Seagate ST8000DM004 / WD WD20EZBX / Toshiba HDWD320UZSVA
+const HDD_MPN_RE = /\b(ST\d{4,5}[A-Z]{2}\d{3}[A-Z0-9]{0,3}|WD\d{2,4}[A-Z]{4,5}|HDW[A-Z]{1,2}\d{2,4}[A-Z]{2,6})\b/;
+
+export function hddMpn(rawName: string): string | undefined {
+  const m = rawName.toUpperCase().match(HDD_MPN_RE);
+  return m ? m[1] : undefined;
+}
+
+// HDD 系列名中英正規化（新梭魚=BarraCuda、藍標=WD Blue、P300…）；長/具體者排前
+const HDD_SERIES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/IRONWOLF\s*PRO|那嘶狼\s*PRO/i, 'IRONWOLFPRO'],
+  [/IRONWOLF|那嘶狼/i, 'IRONWOLF'],
+  [/FIRECUDA|金梭魚/i, 'FIRECUDA'],
+  [/BARRACUDA|梭魚/i, 'BARRACUDA'],
+  [/SKYHAWK\s*AI|監控鷹\s*AI/i, 'SKYHAWKAI'],
+  [/SKYHAWK|監控鷹/i, 'SKYHAWK'],
+  [/EXOS/i, 'EXOS'],
+  [/紅標\s*PLUS|RED\s*PLUS/i, 'REDPLUS'],
+  [/紅標\s*PRO|RED\s*PRO/i, 'REDPRO'],
+  [/紅標|WD\s*RED/i, 'RED'],
+  [/紫標\s*PRO|PURPLE\s*PRO/i, 'PURPLEPRO'],
+  [/紫標|PURPLE/i, 'PURPLE'],
+  [/金標|WD\s*GOLD/i, 'GOLD'],
+  [/黑標|WD\s*BLACK/i, 'BLACK'],
+  [/藍標|WD\s*BLUE/i, 'BLUE'],
+  [/P300/i, 'P300'],
+  [/X300/i, 'X300'],
+  [/N300/i, 'N300'],
+  [/S300/i, 'S300'],
+  [/L200/i, 'L200'],
+];
+
+/**
+ * HDD 規格鍵：品牌+系列+容量+轉速可唯一識別內接碟 SKU。
+ * ponytail: 不含快取容量（64M/256M）——同系列同容量同轉速通常為單一現售 SKU，若誤併再加。
+ */
+export function hddSpecKey(p: Product): string | undefined {
+  if (!p.brand) return undefined;
+  const raw = p.rawName;
+  const series = HDD_SERIES.find(([re]) => re.test(raw))?.[1];
+  if (!series) return undefined;
+  const cap = raw.match(/(?<!\d)(\d+(?:\.\d+)?)\s*TB?(?![A-Z0-9])/i);
+  const rpm = raw.match(/(\d{4})\s*轉/);
+  if (!cap || !rpm) return undefined;
+  return `HDD-SPEC-${p.brand.toUpperCase()}-${series}-${cap[1]}T-${rpm[1]}`.replace(/\s+/g, '');
 }
 
 function exactNameIdentity(name: string, brand: string | undefined, category: ProductCategory): string {
@@ -43,7 +129,18 @@ function exactNameIdentity(name: string, brand: string | undefined, category: Pr
   if ([ProductCategory.SSD, ProductCategory.HDD, ProductCategory.RAM].includes(category)) {
     out = out.replace(/(\d+(?:\.\d+)?)\s*GB\b/gi, '$1G');
   }
-  return out.replace(/[^A-Z0-9\u4e00-\u9fff]+/g, '');
+  if (category === ProductCategory.RAM) {
+    out = out
+      .replace(/\bD([45])[-\s]?(\d{4})\b/gi, 'DDR$1-$2')        // \u901a\u8def\u7e2e\u5beb D5-5600 \u2192 DDR5-5600
+      .replace(/(\d+)\s*G\s*[*X\u00d7]\s*(\d)/gi, '$1GX$2')          // \u96d9\u689d\u5957\u4ef6 16G*2 \u2192 \u55ae\u4e00 token
+      .replace(/SO-?DIMM|\u7b46\u8a18\u578b|\u7b46\u96fb\u7528?/gi, 'NB')                 // \u7b46\u96fb\u8a18\u61b6\u9ad4\u5beb\u6cd5\u7d71\u4e00
+      .replace(/\u684c\u4e0a\u578b|\u8a18\u61b6\u9ad4|UDIMM|\bDIMM\b|\u8d85\u983b|\u96fb\u7af6|\u6563\u71b1\u7247|TRAY|\u55ae\u689d\u88dd?|\u96d9\u901a\u9053|\bCL\d{2}\b/gi, ' ');
+  }
+  // token \u96c6\u5408\uff08\u53bb\u91cd\uff0b\u6392\u5e8f\uff09\u5f8c\u62fc\u63a5\uff1a\u4e09\u5bb6\u901a\u8def\u5c0d\u540c\u4e00 SKU \u7684\u8a5e\u5e8f\u3001\u91cd\u8907\u8a5e\u8207\u4e2d\u82f1\u9ecf\u63a5\u4e0d\u540c
+  // \uff08\u300c16G DDR5 NB\u300dvs\u300cNB DDR5 16G \u7b46\u8a18\u578b\u300d\u3001\u300cUSB\u85cd\u7259\u63a5\u6536\u5668\u300dvs\u300cUSB \u63a5\u6536\u5668\u300d\uff09\u3002
+  // \u82f1\u6578\u9023\u7e8c\u6bb5\u70ba\u4e00\u500b token\u3001\u4e2d\u6587\u9010\u5b57\uff0c\u96c6\u5408\u8a9e\u610f\u8b93 exact key \u5c0d\u8a9e\u5e8f\u8207\u65b7\u8a5e\u4e0d\u654f\u611f\u3002
+  const tokens = out.match(/[A-Za-z0-9]+|[\u4e00-\u9fff]/g) ?? [];
+  return [...new Set(tokens)].sort().join('');
 }
 
 function canUseImplicitBlackVariant(category: ProductCategory): boolean {

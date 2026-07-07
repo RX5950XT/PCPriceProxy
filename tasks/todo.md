@@ -1,3 +1,30 @@
+# PCPriceProxy — 第十三輪：分類側欄準確化 + 儲存/RAM 合併鍵強化
+
+## 本輪需求（使用者）
+- [x] 側欄分類更易用、更符合電腦零件特性。
+- [x] 確認爬到真實資料（三家 live 爬取成功）。
+- [x] 相同型號零件合併比價（HDD/RAM 合併鍵強化）。
+- [x] 優化網站與 API、更新維護文件。
+
+## 執行計畫
+- [x] P1 修 NETWORK 污染（掌機→PACKAGE、印表機/充電座/耳麥/鍵鼠→重判）並拆「其他網通設備」為 攝影機/Mesh/路由器/網卡/NAS/線材。
+- [x] P2 修 HDD 污染（Razer 梭魚耳機、RPM 風扇、HDMI 線）、監控碟獨立子分類；SSD 外接盒（USB10G）過濾與容量抽取修正；FAN 尺寸從型號抓（TF120/TL140）。
+- [x] P3 修 `RE_GPU_MODEL` Ti/XT 黏尾漏判（→(?!\d)）；FAN 污染過濾器（GPU/PSU/AIO/配件）；KEYBOARD 家具過濾（電競椅/桌 277 件）。
+- [x] P4 matcher：HDD 料號鍵（MPN 優先，分 SATA/SAS）＋規格鍵（品牌+系列+容量+轉速）；exact key 改 token 集合（語序不敏感）；RAM 產品線+套件判別鍵；加購優惠→條件價。
+- [x] P5 驗證：72 tests、build、clean-and-rebuild、audit 22 項全 PASS、live 三家重爬 + API 抽樣。
+- [x] P6 更新 CLAUDE/AGENTS/CONTEXT/README/tasks 文件。
+
+## 驗證規格
+- [x] audit 全 PASS（新增 HDD non-disk / FAN non-fan / NETWORK non-network / Furniture 四項，皆 0）。
+- [x] 跨店組 1,167 → 1,358（+16%）；誤併防護：EXOS SATA/SAS 分開、KVR/FURY 分開、單條/雙通分開、價差異常=0。
+
+### 本輪回顧
+- 側欄清理：FAN「其他尺寸」545→176、NETWORK「其他網通」694→288、HDD 污染 -131 件、KEYBOARD 家具 -277 件、SSD 假「10GB」節點歸零。
+- 合併強化：HDD 內接碟以原廠料號（ST*/WD*/HDW*）為最強鍵；exact key token 集合化讓 RAM/周邊跨店語序差異不再擋合併（RAM 跨店 17→33 組、FAN 1→98 組）。
+- 關鍵原則：display name 給人看、合併 key 從 raw_name 抽判別資訊（括號內的 KVR/KF、雙通、料號都會被 normalizeName 剝掉）。
+
+---
+
 # PCPriceProxy — 第十二輪：跨店相同商品落單收斂
 
 ## 本輪需求（使用者）

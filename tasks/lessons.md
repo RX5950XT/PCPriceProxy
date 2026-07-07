@@ -164,3 +164,27 @@
 ## 29. GPU 精確鍵必須含 SKU 變體且 exact group 每來源單代表
 - **問題**：只用晶片＋產品線＋VRAM 會把 `DUAL-RTX5060-O8G` 與 `DUAL-RTX5060-O8G-WHITE` 合併；exact group 若收同來源多筆，會把同店變體藏進跨店卡。
 - **規則**：GPU key 要納入顏色/OC/版本等變體；exact match 形成跨店組時，每個來源只選最低價代表，其餘商品保持單例，避免誤併與商品消失感。
+
+## 35. 隱式偵測的訊號詞必須排除「其他品類的常用詞」
+- **問題**：`looksLikeHdd` 用 `\bRPM\b` 誤收「1600 RPM」機殼風扇；`BARRACUDA` 誤收 Razer 梭魚耳機；`HDD` 關鍵字誤中 HDMI 線型號 `HDD2012AA`。165 件非硬碟商品堆在 HDD 側欄「缺容量」節點，audit 原本抓不到。
+- **規則**：HDD 訊號用「N轉」不用 RPM（台灣通路慣例）；HDD excludes 補 耳機/RAZER/HDMI/傳輸線/風扇/PWM/ARGB/入組/3Pin/燈效。新增隱式風扇偵測（3/4Pin + RPM）接住 Noctua FLX 這類無「風扇」字樣的真風扇，避免被過濾器踢成 OTHER 誤刪。
+
+## 36. 型號數字後的 `\b` 對 Ti/XT 黏尾失效
+- **問題**：`RE_GPU_MODEL` 的 `\d{3,4}\b` 對「RTX 5070Ti」「RX9070XT」失效（數字後緊接字母無邊界），這些 GPU 憑「三風扇」規格字掉進 FAN。
+- **規則**：型號數字後界一律用 `(?!\d)` 取代 `\b`（同 lesson 11 的前界原則）。
+
+## 37. FAN/NETWORK/KEYBOARD 等周邊來源分類也要覆核
+- **問題**：FAN 來源混入水冷/GPU/PSU（UD750GM 無獨立瓦數 token）/集線器/燈條；NETWORK 混入印表機、充電座、無線耳麥、鍵鼠組、掌機；KEYBOARD 混入 274 件電競椅/電競桌（Cooler Master 電競桌重判時又因品牌名含 Cooler 回到 COOLER）。
+- **規則**：每個大分類都要有污染過濾器並在 `categorizeProduct` 覆核；重判後的 `detectCategory` 關鍵字迴圈也要套同一組過濾器（包含品牌名會誤中關鍵字的分類，如 Cooler Master→COOLER）。掌機（ALLY/Claw/Steam Deck/Legion Go + 儲存簽章）歸 PACKAGE；家具/印表機/充電座落 OTHER 由 diy-filter 刪除。looksLikePsu 支援「認證+模組化/ATX3」雙訊號（瓦數藏在型號如 UD750GM）。
+
+## 38. 通路不寫型號的品類，合併鍵要用 raw_name 的料號或規格簽章
+- **問題**：HDD 三家顯示名差異太大（coolpc 截到只剩「Toshiba 2TB」），NAME key 永遠撞不上，HDD 跨店率僅 0.2%。
+- **規則**：內接 HDD 三家品名都附原廠料號（ST8000DM004/WD20EZBX/HDWD320UZSVA）——料號全球唯一、**最優先**（還能分 SATA 017B vs SAS 018B，規格鍵分不出）；缺料號才退「品牌+系列+容量+轉速」規格鍵（系列名要中英正規化：新梭魚=BarraCuda、藍標=WD Blue、監控鷹=SkyHawk）。外接碟無轉速自然不給規格鍵，交 NAME/fuzzy。
+
+## 39. exact key 要用 token 集合，不能用連接字串（語序敏感）
+- **問題**：「美光16GB DDR5-5600 NB」vs「Micron Crucial NB DDR5-5600 16G 筆記型記憶體」token 相同語序不同，串接字串 key 撞不上；「USB藍牙接收器」vs「USB 接收器」中英黏接也不同。
+- **規則**：`exactNameIdentity` 最後改為 token 集合：英數連續段為一 token、中文逐字、去重、排序後拼接。RAM 另補 canonical：`D5-5600→DDR5-5600`、`16G*2→16GX2`、`筆記型/SO-DIMM→NB`、剝 桌上型/記憶體/CL 時序等通用詞。
+
+## 40. normalizeName 剝括號會清掉 SKU 判別資訊，key 要從 raw_name 補回
+- **問題**：金士頓 KVR（ValueRAM）與 KF（FURY Beast）、單條 32GB 與雙通 16GB*2 的判別都在括號內，剝掉後顯示名完全相同 → 誤併成一張卡（價差 1.66 倍）。
+- **規則**：RAM exact key 追加 `ramKeyExtras(rawName)`：產品線（RAM_LINES 中英正規化，如 獸獵者=FURY Beast）+ 雙條套件 KIT2。原則通用：display name 給人看、合併 key 給機器看，key 的判別資訊一律回 raw_name 抽。
