@@ -1,3 +1,27 @@
+# PCPriceProxy — 第十四輪：主機板/顯卡側欄樹重構
+
+## 本輪需求（使用者）
+- [x] 主機板底下移除 DDR5/DDR4 等冗餘層級，最上層改加 CPU 腳位；依實際資料決定層級。
+- [x] 顯卡底下加品牌（AIB 廠）層；顯存容量「不只一種」的型號才需要獨立分容量層。
+
+## 執行計畫
+- [x] P1 主機板：`CHIPSET_SOCKET` 晶片組→腳位映射，`detectMotherboardSubcategory` 輸出 `腳位 > 晶片組 > 板廠`，移除 DDR/板型；晶片組抓不到退品名 socket token。
+- [x] P2 顯卡：`MULTI_VRAM_MODELS` 集合，只有多顯存型號插入 VRAM 層，其餘 `系列 > 型號 > 品牌`；`detectGpuSubcategory` 用 `extractBrand`；補 `RX 9070 GRE` 型號。
+- [x] P3 排序：`SIDEBAR_ORDERS` 單一真相注入 client（消除 `script.ts` 硬編碼清單）；MB 加權排序 `sr*100000+cr*100+vr`；`subcategory-sort.ts` 補 `SOCKET_ORDER`/裸名 `CHIPSET_ORDER`/`VENDOR_ORDER`。
+- [x] P4 `vendorRank` 取葉節點，讓 flat API 品牌順序與樹一致。
+- [x] P5 驗證：75 tests、build、clean-and-rebuild、audit 22 項全 PASS、live server API 抽樣 MB/GPU 樹排序。
+- [x] P6 更新 CONTEXT/CLAUDE/AGENTS/tasks/lessons 文件。
+
+## 驗證規格
+- [x] MB 樹 `Intel LGA1851 > Z890 > ASUS…`（socket/chipset/vendor 皆語意序），GPU 樹 `RTX 5090 > GIGABYTE`、`RTX 5060 Ti > 16G/8G > 品牌`。
+- [x] MB 64 子類、GPU 126 子類；audit 0 FAIL；商品 15,778 / 卡 13,845 / 跨店 1,359。
+
+### 本輪回顧
+- 依實際資料設計層級：主機板從「DDR×板型×晶片組」冗餘多層改為「腳位 > 晶片組 > 板廠」三層；顯卡只在多顯存型號插容量層，消除 `RTX 5090 > 32G` 這種單子節點。
+- 單一真相：排序清單全收進 `SIDEBAR_ORDERS` 並注入 client，補上第八輪殘留在 `script.ts` 的硬編碼 `Intel Z890` 清單違規。
+
+---
+
 # PCPriceProxy — 第十三輪：分類側欄準確化 + 儲存/RAM 合併鍵強化
 
 ## 本輪需求（使用者）

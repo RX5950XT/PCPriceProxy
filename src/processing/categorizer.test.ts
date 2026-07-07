@@ -46,7 +46,7 @@ describe('categorizeProduct 分類順序', () => {
     const categorized = categorizeProduct(makeProduct(rawName, ProductCategory.CPU));
 
     expect(categorized.category).toBe(ProductCategory.MOTHERBOARD);
-    expect(categorized.subcategory).toContain('AMD B840');
+    expect(categorized.subcategory).toBe('AMD AM5 > B840 > ASUS');
   });
 
   it('mATX 標記的任搭 CPU 主機板也要重判為主機板', () => {
@@ -54,7 +54,7 @@ describe('categorizeProduct 分類順序', () => {
     const categorized = categorizeProduct(makeProduct(rawName, ProductCategory.CPU));
 
     expect(categorized.category).toBe(ProductCategory.MOTHERBOARD);
-    expect(categorized.subcategory).toContain('AMD B650');
+    expect(categorized.subcategory).toBe('AMD AM5 > B650 > ASUS');
   });
 
   it('U 版專案 CPU + 主機板是真組合', () => {
@@ -138,7 +138,7 @@ describe('categorizeProduct 分類順序', () => {
     const ws = categorizeProduct(makeProduct('華碩 Pro WS W890E-SAGE SE(EEB/2*Intel 10G+LAN 1Gb/註四年)16+2+2+1+2 相供電, $39990', ProductCategory.MOTHERBOARD));
 
     expect(gt.subcategory).toContain('GT 1030');
-    expect(ws.subcategory).toContain('Intel W890');
+    expect(ws.subcategory).toBe('Intel LGA1851 > W890 > ASUS');
   });
 
   it('CPU 側欄不輸出高階或舊款孤立世代節點', () => {
@@ -180,9 +180,9 @@ describe('categorizeProduct 分類順序', () => {
     const rtxPro = categorizeProduct(makeProduct('麗臺 NVIDIA RTX PRO 6000 Blackwell 96GB GDDR7 工作站繪圖卡【少量】, $476000 ◆ ★', ProductCategory.GPU));
     const rtxPro4500 = categorizeProduct(makeProduct('麗臺 NVIDIA RTX PRO 4500 Blackwell 32GB GDDR7 工作站繪圖卡【少量】, $131000 ◆ ★', ProductCategory.GPU));
 
-    expect(rx9070.subcategory).toBe('AMD RX 9000系列 > RX 9070 XT > 16G');
-    expect(rtxPro.subcategory).toBe('NVIDIA 專業繪圖卡 > RTX PRO 6000 > 96G');
-    expect(rtxPro4500.subcategory).toBe('NVIDIA 專業繪圖卡 > RTX PRO 4500 > 32G');
+    expect(rx9070.subcategory).toBe('AMD RX 9000系列 > RX 9070 XT > GIGABYTE');
+    expect(rtxPro.subcategory).toBe('NVIDIA 專業繪圖卡 > RTX PRO 6000 > Leadtek');
+    expect(rtxPro4500.subcategory).toBe('NVIDIA 專業繪圖卡 > RTX PRO 4500 > Leadtek');
   });
 
   it('GPU 精確鍵要區分白色版與一般版', () => {
@@ -295,5 +295,26 @@ describe('第十三輪：家具過濾', () => {
     expect(chair.category).toBe(ProductCategory.OTHER);
     const desk = categorizeProduct(makeProduct('irocks D01-SL-DX 電競桌-電動升降(北歐雲杉)/靜音雙馬達/乘重:100KG', ProductCategory.KEYBOARD));
     expect(desk.category).toBe(ProductCategory.OTHER);
+  });
+});
+
+describe('第十四輪：主機板腳位樹與 GPU 品牌層', () => {
+  it('主機板子分類為「CPU 腳位 > 晶片組 > 品牌」，無 DDR 與尺寸層', () => {
+    const mb = categorizeProduct(makeProduct('微星 MAG B850 TOMAHAWK MAX WIFI (ATX/2.5G LAN/DDR5)', ProductCategory.MOTHERBOARD));
+    expect(mb.subcategory).toBe('AMD AM5 > B850 > MSI');
+    const intel = categorizeProduct(makeProduct('華碩 PRIME B860M-A WIFI (M-ATX/DDR5/1G LAN)', ProductCategory.MOTHERBOARD));
+    expect(intel.subcategory).toBe('Intel LGA1851 > B860 > ASUS');
+  });
+
+  it('GPU 子分類為「系列 > 型號 > 品牌」，僅多顯存型號插入容量層', () => {
+    const single = categorizeProduct(makeProduct('技嘉 RTX 5090 GAMING OC 32G (std:2655MHz/三風扇)', ProductCategory.GPU));
+    expect(single.subcategory).toBe('NVIDIA RTX 50系列 > RTX 5090 > GIGABYTE');
+    const multi = categorizeProduct(makeProduct('華碩 DUAL-RTX5060TI-O16G (std:2692MHz/雙風扇)', ProductCategory.GPU));
+    expect(multi.subcategory).toBe('NVIDIA RTX 50系列 > RTX 5060 Ti > 16G > ASUS');
+  });
+
+  it('RX 9070 GRE 是獨立型號，不與 RX 9070 混同', () => {
+    const gre = categorizeProduct(makeProduct('藍寶石 PULSE 脈動 RX 9070 GRE 12GB D6 (std:2790MHz/雙風扇)', ProductCategory.GPU));
+    expect(gre.subcategory).toBe('AMD RX 9000系列 > RX 9070 GRE > Sapphire');
   });
 });

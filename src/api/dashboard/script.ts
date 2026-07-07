@@ -2,8 +2,13 @@
  * Dashboard 前端互動腳本。獨立成模組以符合單檔 <800 行規範。
  * 重點：側欄分類樹完全資料驅動（來自 /api/v1/categories，含圖示與數量）、
  * 中文分類標籤、跨店比價切換。
+ * 排序表由 shared/subcategory-sort 的 SIDEBAR_ORDERS 注入（單一真相，client 不自帶清單）。
  */
+import { SIDEBAR_ORDERS as ORDERS } from '../../shared/subcategory-sort.js';
+
 export const DASHBOARD_SCRIPT = `
+  // ── 排序表（伺服端注入） ──
+  const SIDEBAR_ORDERS = ${JSON.stringify(ORDERS)};
   // ── State ──
   let category = '';
   let subcategory = '';
@@ -173,17 +178,29 @@ export const DASHBOARD_SCRIPT = `
       if (/CORE I3|ULTRA 3|RYZEN 3/.test(upper)) return 530;
       return Number.MAX_SAFE_INTEGER;
     };
+    const vendorRank = (label) => {
+      const idx = SIDEBAR_ORDERS.vendor.map(v => v.toUpperCase()).indexOf(label.trim().toUpperCase());
+      return idx >= 0 ? idx : Number.MAX_SAFE_INTEGER;
+    };
     const semanticRank = (label) => {
       if (cat === 'cpu') return cpuRank(label);
-      if (cat === 'motherboard') return orderedRank(label, [
-        'Intel Z890', 'Intel W890', 'Intel Z790', 'Intel W790', 'Intel B860', 'Intel B760', 'Intel H810', 'Intel H610', 'Intel W680', 'Intel B660',
-        'AMD X870E', 'AMD X870', 'AMD WRX90', 'AMD TRX50', 'AMD B850', 'AMD B840', 'AMD X670E', 'AMD X670', 'AMD B650E', 'AMD B650', 'AMD A620', 'AMD B550', 'AMD A520',
-      ]);
-      if (cat === 'gpu') return orderedRank(label, [
-        'NVIDIA RTX 50系列', 'NVIDIA RTX 40系列', 'NVIDIA RTX 30系列', 'NVIDIA GT 10系列', 'NVIDIA GT 700系列',
-        'AMD RX 9000系列', 'AMD RX 8000系列', 'AMD RX 7000系列', 'AMD RX 6000系列',
-        'Intel Arc 系列', 'NVIDIA 專業繪圖卡', 'AMD 專業繪圖卡',
-      ]);
+      if (cat === 'motherboard') {
+        const s = orderedRank(label, SIDEBAR_ORDERS.socket);
+        if (s !== Number.MAX_SAFE_INTEGER) return s;
+        const c = orderedRank(label, SIDEBAR_ORDERS.chipset);
+        if (c !== Number.MAX_SAFE_INTEGER) return 100 + c;
+        const v = vendorRank(label);
+        return v === Number.MAX_SAFE_INTEGER ? v : 200 + v;
+      }
+      if (cat === 'gpu') {
+        const s = orderedRank(label, SIDEBAR_ORDERS.gpuSeries);
+        if (s !== Number.MAX_SAFE_INTEGER) return s;
+        const v = vendorRank(label);
+        return v === Number.MAX_SAFE_INTEGER ? v : 100 + v;
+      }
+      if (cat === 'hdd') return orderedRank(label, SIDEBAR_ORDERS.hddType);
+      if (cat === 'network') return orderedRank(label, SIDEBAR_ORDERS.network);
+      if (cat === 'fan') return orderedRank(label, SIDEBAR_ORDERS.fan);
       return Number.MAX_SAFE_INTEGER;
     };
 

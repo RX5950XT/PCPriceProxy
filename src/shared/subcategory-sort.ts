@@ -1,8 +1,17 @@
 import { ProductCategory } from './types.js';
 
+// 主機板側欄：CPU 腳位（第一層）→ 晶片組（第二層，裸名）→ 板廠（第三層）
+const SOCKET_ORDER: readonly string[] = [
+  'Intel LGA1851', 'Intel LGA1700', 'Intel LGA4677', 'AMD AM5', 'AMD AM4', 'AMD sTR5',
+];
 const CHIPSET_ORDER: readonly string[] = [
-  'Intel Z890', 'Intel W890', 'Intel Z790', 'Intel W790', 'Intel B860', 'Intel B760', 'Intel H810', 'Intel H610', 'Intel W680', 'Intel B660',
-  'AMD X870E', 'AMD X870', 'AMD WRX90', 'AMD TRX50', 'AMD B850', 'AMD B840', 'AMD X670E', 'AMD X670', 'AMD B650E', 'AMD B650', 'AMD A620', 'AMD B550', 'AMD A520',
+  'Z890', 'W890', 'B860', 'H810', 'Z790', 'B760', 'H610', 'W680', 'B660', 'W790',
+  'X870E', 'X870', 'WRX90', 'TRX50', 'B850', 'B840', 'X670E', 'X670', 'B650E', 'B650', 'A620', 'B550', 'A520',
+];
+// 板卡/主機板品牌慣用順序（其餘品牌落 locale 排序）
+const VENDOR_ORDER: readonly string[] = [
+  'ASUS', 'MSI', 'GIGABYTE', 'ASRock', 'BIOSTAR',
+  'Sapphire', 'PowerColor', 'XFX', 'ZOTAC', 'PNY', 'Leadtek', 'Inno3D', 'Palit', 'Gainward', 'GALAX', 'COLORFUL', 'Maxsun',
 ];
 
 const GPU_SERIES_ORDER: readonly string[] = [
@@ -14,6 +23,17 @@ const GPU_SERIES_ORDER: readonly string[] = [
 const HDD_TYPE_ORDER: readonly string[] = ['桌上型硬碟', 'NAS 專用碟', '監控碟', '企業級硬碟', '行動外接硬碟'];
 const NETWORK_ORDER: readonly string[] = ['無線路由器', '網路卡 / 接收器', '交換器', 'NAS 網路儲存', '網路攝影機', '網路線材', '其他網通設備'];
 const FAN_ORDER: readonly string[] = ['12cm 風扇', '14cm 風扇', '8/9cm 小風扇', '其他尺寸風扇'];
+
+/** 供 Dashboard 前端腳本注入的排序表（單一真相；client 端 compareNodes 不可自帶清單）。 */
+export const SIDEBAR_ORDERS = {
+  socket: SOCKET_ORDER,
+  chipset: CHIPSET_ORDER,
+  vendor: VENDOR_ORDER,
+  gpuSeries: GPU_SERIES_ORDER,
+  hddType: HDD_TYPE_ORDER,
+  network: NETWORK_ORDER,
+  fan: FAN_ORDER,
+} as const;
 
 const DDR_ORDER: readonly string[] = ['DDR5', 'DDR4', 'D5', 'D4'];
 const DEVICE_ORDER: readonly string[] = ['桌上型 UDIMM', '桌上型', '筆電用 SO-DIMM', '筆電用'];
@@ -65,8 +85,26 @@ function exactRank(category: string, value: string): number {
 function semanticRank(category: string, value: string): number {
   if (!value) return Number.MAX_SAFE_INTEGER;
   if (category === ProductCategory.CPU) return cpuRank(value);
-  if (category === ProductCategory.MOTHERBOARD) return orderedRank(value, CHIPSET_ORDER);
-  if (category === ProductCategory.GPU) return orderedRank(value, GPU_SERIES_ORDER);
+  if (category === ProductCategory.MOTHERBOARD) {
+    // 加權組合：同時支援「單一節點名」與「完整 A > B > C 字串」（API flat 清單）排序
+    const s = orderedRank(value, SOCKET_ORDER);
+    const c = orderedRank(value, CHIPSET_ORDER);
+    const v = vendorRank(value);
+    if (s === Number.MAX_SAFE_INTEGER && c === Number.MAX_SAFE_INTEGER && v === Number.MAX_SAFE_INTEGER) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    const sr = s === Number.MAX_SAFE_INTEGER ? 99 : s;
+    const cr = c === Number.MAX_SAFE_INTEGER ? 999 : c;
+    const vr = v === Number.MAX_SAFE_INTEGER ? 99 : v;
+    return sr * 100000 + cr * 100 + vr;
+  }
+  if (category === ProductCategory.GPU) {
+    const series = orderedRank(value, GPU_SERIES_ORDER);
+    if (series !== Number.MAX_SAFE_INTEGER) return series;
+    const vendor = vendorRank(value);
+    if (vendor !== Number.MAX_SAFE_INTEGER) return 100 + vendor;
+    return Number.MAX_SAFE_INTEGER;
+  }
   if (category === ProductCategory.HDD) return orderedRank(value, HDD_TYPE_ORDER);
   if (category === ProductCategory.NETWORK) return orderedRank(value, NETWORK_ORDER);
   if (category === ProductCategory.FAN) return orderedRank(value, FAN_ORDER);
@@ -96,6 +134,14 @@ function cpuRank(value: string): number {
   if (/CORE I5|ULTRA 5|RYZEN 5/.test(upper)) return 520;
   if (/CORE I3|ULTRA 3|RYZEN 3/.test(upper)) return 530;
   return Number.MAX_SAFE_INTEGER;
+}
+
+function vendorRank(value: string): number {
+  // 取最後一段葉節點（flat API 傳「A > B > 品牌」整串，樹則傳裸品牌名）
+  const leaf = value.includes('>') ? value.slice(value.lastIndexOf('>') + 1) : value;
+  const upper = leaf.trim().toUpperCase();
+  const idx = VENDOR_ORDER.findIndex(v => v.toUpperCase() === upper);
+  return idx >= 0 ? idx : Number.MAX_SAFE_INTEGER;
 }
 
 function orderedRank(value: string, order: readonly string[]): number {

@@ -1,5 +1,6 @@
 import { ProductCategory } from '../shared/types.js';
 import type { Product } from '../shared/types.js';
+import { extractBrand } from './normalizer.js';
 
 /**
  * Category keyword mapping for fallback detection.
@@ -476,6 +477,7 @@ const GPU_MODELS: readonly GpuModelDef[] = [
   { needle: 'GT710', display: 'GT 710' },
   // AMD RX 9000 / 8000
   { needle: '9070XT', display: 'RX 9070 XT' },
+  { needle: '9070GRE', display: 'RX 9070 GRE' },
   { needle: '9070', display: 'RX 9070' },
   { needle: '9060XT', display: 'RX 9060 XT' },
   { needle: '9060', display: 'RX 9060' },
@@ -634,6 +636,9 @@ function gpuVariantKey(upperName: string): string | null {
   return parts.length > 0 ? parts.join('-') : null;
 }
 
+// 同一晶片有多種顯存容量的型號才顯示 VRAM 層（依實際在售資料維護；新變體上市時擴充）
+const MULTI_VRAM_MODELS = new Set(['GT 730', 'RTX 3050', 'RTX 5060 Ti', 'RTX PRO 5000', 'RX 9060 XT', 'RTX 3060', 'RTX 4060 Ti']);
+
 function detectGpuSubcategory(name: string): string | null {
   const spaceless = gpuModelSearchText(name).toUpperCase().replace(/\s+/g, '');
 
@@ -650,7 +655,12 @@ function detectGpuSubcategory(name: string): string | null {
 
   if (!series) series = gpuSeriesFallback(name);
 
-  return hierarchy(series, model, detectVram(name));
+  // 型號 > (多顯存型號才有的容量層) > 板卡品牌
+  const brand = extractBrand(name) ?? null;
+  if (model && MULTI_VRAM_MODELS.has(model)) {
+    return hierarchy(series, model, detectVram(name), brand);
+  }
+  return hierarchy(series, model, brand);
 }
 
 function gpuModelSearchText(name: string): string {
@@ -733,31 +743,36 @@ function detectMbBrand(name: string): string | null {
   return null;
 }
 
+// 晶片組 → CPU 腳位（裝機第一個要對的規格；側欄最上層）
+const CHIPSET_SOCKET: Record<string, string> = {
+  Z890: 'Intel LGA1851', W890: 'Intel LGA1851', B860: 'Intel LGA1851', H810: 'Intel LGA1851',
+  Z790: 'Intel LGA1700', B760: 'Intel LGA1700', H610: 'Intel LGA1700', W680: 'Intel LGA1700', B660: 'Intel LGA1700',
+  W790: 'Intel LGA4677',
+  X870E: 'AMD AM5', X870: 'AMD AM5', B850: 'AMD AM5', B840: 'AMD AM5',
+  X670E: 'AMD AM5', X670: 'AMD AM5', B650E: 'AMD AM5', B650: 'AMD AM5', A620: 'AMD AM5',
+  B550: 'AMD AM4', A520: 'AMD AM4',
+  TRX50: 'AMD sTR5', WRX90: 'AMD sTR5',
+};
+
 function detectMotherboardSubcategory(name: string): string | null {
   const upperName = name.toUpperCase();
 
-  let chipset: string | null = null;
-  const detectedChipset = detectMotherboardChipset(upperName);
-  if (detectedChipset) {
-    const brandPrefix = INTEL_CHIPSETS.includes(detectedChipset as (typeof INTEL_CHIPSETS)[number]) ? 'Intel ' : 'AMD ';
-    chipset = `${brandPrefix}${detectedChipset}`;
-  }
-
+  const chipset = detectMotherboardChipset(upperName);
   const brand = detectMbBrand(name);
 
-  let size = 'ATX';
-  if (upperName.includes('ITX') || upperName.includes('I-TX') || upperName.includes('MINI-ITX')) size = 'Mini-ITX';
-  else if (upperName.includes('M-ATX') || upperName.includes('MICRO-ATX') || upperName.includes('MATX') || upperName.includes('M.ATX')) size = 'Micro-ATX';
-  else if (upperName.includes('E-ATX') || upperName.includes('EATX')) size = 'E-ATX';
-  else if (upperName.includes('ATX')) size = 'ATX';
+  if (chipset) {
+    // CPU 腳位 > 晶片組 > 品牌（腳位已含 Intel/AMD，晶片組不再重複前綴；尺寸/DDR 屬規格細節不入側欄）
+    return hierarchy(CHIPSET_SOCKET[chipset] ?? null, chipset, brand);
+  }
 
-  let ddr = 'DDR5';
-  if (upperName.includes('D4') || upperName.includes('DDR4')) ddr = 'DDR4';
-  else if (upperName.includes('D5') || upperName.includes('DDR5')) ddr = 'DDR5';
-  else if (['B550', 'A520'].some(c => upperName.includes(c))) ddr = 'DDR4';
-
-  // 晶片組 > 品牌 > 尺寸 > DDR；晶片組未知即整段未知
-  return hierarchy(chipset, brand, size, ddr);
+  // 無晶片組時退而求其次：品名直接標示腳位
+  const socketToken = upperName.match(/\bAM[45]\b|\bLGA\s?(1851|1700|4677)\b|\bsTR5\b/i);
+  if (socketToken) {
+    const token = socketToken[0].toUpperCase().replace(/\s+/g, '');
+    const label = token.startsWith('AM') || token === 'STR5' ? `AMD ${token === 'STR5' ? 'sTR5' : token}` : `Intel ${token}`;
+    return hierarchy(label, null);
+  }
+  return null;
 }
 
 function detectRamSubcategory(name: string): string | null {

@@ -22,12 +22,14 @@
 - 隱式偵測訊號詞要避開他品類常用詞：HDD 用「N轉」不用 `RPM`（風扇）、`BARRACUDA` 防 Razer 梭魚耳機、`HDD` 關鍵字防 HDMI 線型號；GPU 型號數字後界用 `(?!\d)` 不用 `\b`（`RTX 5070Ti`/`RX9070XT` 黏尾會漏）；風扇隱式簽章＝3/4Pin＋RPM；PSU 隱式簽章支援「認證＋模組化/ATX3」（瓦數藏在型號如 UD750GM）。
 - **組合 vs 條件價單品**：`isRealBundle`（真組合/整機/筆電/掌機 ALLY・Claw・Steam Deck：A+B 接真零件、CPU+GPU+RAM+儲存完整主機、欣亞PC/電競電腦等通路整機、周邊套裝、系統關鍵字）才歸 PACKAGE；`detectPriceCondition`（搭板/限組裝/套裝搭購/加購優惠…）只記 `specs.priceCondition`、單品仍歸真分類。A+B 比對**務必先中和假加號**（相電源/clearance/PSU認證 80+~92+/容量加號），否則單品被自身規格誤判成組合。`matcher` 會排除帶 `priceCondition` 者的跨店比價。
 - CPU 子分類只輸出規格層級：Ryzen 9/7/5、Threadripper 獨立、Intel 10 代以上與 Core Ultra 200S；不要加入 `高階` 這類行銷詞，也不要讓 Intel 第 1~9 代孤立節點污染側欄。
+- **主機板子分類＝`CPU 腳位 > 晶片組 > 板廠`**：`detectMotherboardSubcategory` 先抓晶片組，用 `CHIPSET_SOCKET` 映射到腳位（新增晶片組要同步補這張表與 `subcategory-sort.ts` 的 `CHIPSET_ORDER`）；晶片組抓不到才退品名 socket token。**不要再加 DDR/板型層級**（使用者明確要求移除，冗餘）。
+- **顯卡子分類＝`系列 > 型號 > [多顯存才有容量層] > 品牌`**：只有 `MULTI_VRAM_MODELS`（同型號實際存在多種 VRAM，如 RTX 5060 Ti 8G/16G）才插入 VRAM 層，單一顯存型號直接到品牌（避免 `RTX 5090 > 32G` 這種單子節點冗餘）；品牌走 `extractBrand` 抓 AIB 廠。新增多顯存型號時維護 `MULTI_VRAM_MODELS` 集合。
 - GPU 型號比對不可掃未清理的裸數字；`gpuModelSearchText()` 需先移除價格、MHz、cm、瓦數，避免價格/時脈被誤判成 RX/RTX 型號。audit 的 `GPU model collision` 必須維持 0。
 - GPU 精確比對鍵在 `categorizer.gpuMatchKey`，需含晶片、產品線、VRAM 與顏色/OC 等 SKU 變體；非 PACKAGE 分類用 `matcher.exactMatchKey` 的「分類 + 品牌 + 顯示名 token 集合」收斂同顯示名重複列。exact group 必須把同 key 全部商品回寫同一個 `match_group_id`，避免非代表列變成 `mg-*` 重複卡；Dashboard render 再從 group products 選每來源最低價顯示。
 - **合併 key 從 raw_name 抽判別資訊**（display name 給人看、key 給機器看）：HDD 內接碟以原廠料號（ST*/WD*/HDW*）最優先（能分 SATA/SAS），缺料號退「品牌+系列+容量+轉速」規格鍵（`HDD_SERIES` 中英正規化：新梭魚=BarraCuda、藍標=BLUE）；RAM key 追加 `ramKeyExtras`（產品線 KVR≠FURY、雙條 KIT2——括號內判別會被 normalizeName 剝掉）。`exactNameIdentity` 用 token 集合（英數段一 token、中文逐字、去重排序），對語序與中英黏接不敏感；RAM canonical：D5→DDR5、16G*2→16GX2、筆記型/SO-DIMM→NB。
 - `normalizer.normalizeName` 不可清掉會影響 SKU 的變體：顏色、鍵盤軸體、風扇單顆/3IN1/反向、散熱膏克數、主機板 W/ICE、AIO 白龍/黑白等要保留；來源噪音（供電相數、socket、主機板/水冷等通用詞、色版、`G/GB`）要 canonicalize，不要讓同 SKU 跨店落單。`matcher` fuzzy 比對遇到顏色或鍵盤軸體衝突必須跳過。
 - 跨店合併驗證不能只看 exact split；還要掃「跨來源、同分類品牌、相近價位、高相似標題但不同 match group」候選，並用 live API 驗證代表樣本。`match_groups.lowest_price/highest_price` 必須用每來源最低代表價計算，避免同來源重複高價造成假價差異常。全庫驗證以 `Exact duplicate split keys = 0`、`Price anomalies = 0` 與候選掃描為準。
-- 子分類排序單一邏輯在 `src/shared/subcategory-sort.ts`，API 與 Dashboard 都要用分類語意排序；不可用泛用 `Intel/AMD` 字串或 DB count 排主機板/GPU/CPU/RAM 樹。
+- 子分類排序單一邏輯在 `src/shared/subcategory-sort.ts`，API 與 Dashboard 都要用分類語意排序；不可用泛用 `Intel/AMD` 字串或 DB count 排主機板/GPU/CPU/RAM 樹。排序清單集中在 `SIDEBAR_ORDERS`（socket/chipset/vendor/gpuSeries/hddType/network/fan），由 `dashboard/script.ts` 以 `${JSON.stringify(ORDERS)}` 注入 client；**client `compareNodes` 不可自帶硬編碼清單**。MB flat API 用加權組合 `sr*100000+cr*100+vr`（同時支援裸節點名與完整 `A > B > C` 字串）；`vendorRank` 取 `>` 最後一段葉節點，讓 flat API 品牌順序與樹一致。
 - 分類顯示名/圖示/排序集中在 `src/shared/constants.ts` 的 `CATEGORY_META`（單一真相）；品牌正規化用 `KNOWN_BRANDS` + `BRAND_ALIASES`，抽取一律走 `normalizer.extractBrand`（勿在 scraper 重複實作）。
 - 前端 Dashboard 拆成 `src/api/dashboard.ts`（模板）＋ `dashboard/styles.ts`＋`dashboard/script.ts`；側欄分類樹資料驅動自 `/api/v1/categories`。
 - 新增主分類時：在 `ProductCategory` enum、`CATEGORY_META`、各來源 category map 補齊即可，側欄會自動出現。

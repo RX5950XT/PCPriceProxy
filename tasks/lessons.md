@@ -188,3 +188,11 @@
 ## 40. normalizeName 剝括號會清掉 SKU 判別資訊，key 要從 raw_name 補回
 - **問題**：金士頓 KVR（ValueRAM）與 KF（FURY Beast）、單條 32GB 與雙通 16GB*2 的判別都在括號內，剝掉後顯示名完全相同 → 誤併成一張卡（價差 1.66 倍）。
 - **規則**：RAM exact key 追加 `ramKeyExtras(rawName)`：產品線（RAM_LINES 中英正規化，如 獸獵者=FURY Beast）+ 雙條套件 KIT2。原則通用：display name 給人看、合併 key 給機器看，key 的判別資訊一律回 raw_name 抽。
+
+## 41. 側欄分類層級要依「實際資料」設計，冗餘單子節點是雜訊
+- **問題**：主機板硬塞 DDR5/DDR4×板型×晶片組多層，多數組合只有一兩件；顯卡每個型號都掛 VRAM 層，`RTX 5090 > 32G` 這種只有單一顯存的型號變成無意義的單子節點。使用者直接點名要精簡。
+- **規則**：分層前先查該分類實際有哪些值（`SELECT DISTINCT subcategory ... GROUP BY`）。主機板改 `CPU 腳位 > 晶片組 > 板廠`（腳位是使用者選板的第一決策點）；顯卡只有 `MULTI_VRAM_MODELS`（實際存在多種 VRAM 的型號）才插容量層，其餘直接到品牌。層級要對應真實選購決策，不是把所有規格維度都堆成樹。
+
+## 42. 排序清單只能有一份，client 端不可自帶硬編碼
+- **問題**：第八輪把語意排序集中到 `subcategory-sort.ts`，但 Dashboard `script.ts` 的 `compareNodes` 仍殘留一份 `Intel Z890...` 硬編碼清單；改晶片組樹後 client 沒跟著改，樹序與 API 不一致（單一真相被破壞）。
+- **規則**：排序清單集中在 `SIDEBAR_ORDERS`（server 端），用 `${JSON.stringify(ORDERS)}` 注入 client，`compareNodes` 只讀注入值、不自帶清單。同一份資料被 server 與 client 共用時，一律 server 匯出 + 注入，禁止兩邊各維護一份。`vendorRank` 這類 helper 要同時吃「裸節點名」（樹）與「完整 A > B > C 字串」（flat API），取最後一段葉節點即可兩者通用。

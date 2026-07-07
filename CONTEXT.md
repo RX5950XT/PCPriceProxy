@@ -4,7 +4,14 @@
 PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。
 
 ## 系統運作狀態（已驗證，2026-07-07）
-資料流：scrape → normalize → categorize → **diy-filter** → match → `products` / `match_groups`。三家 live scrape 正常（2026-07-07 即時重爬：coolpc 6529 / sinya 5514 / autobuy 3714，errors 0）。目前 live DB **15,757 件商品**、**13,825 張商品卡**、**1,358 組跨店比價**（第十二輪 1,167 → +16%）、20 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **22 項檢查全 PASS**（本輪新增 HDD non-disk / FAN non-fan / NETWORK non-network / Furniture 四項污染檢查）。`npm run test` 72 tests、`npm run build` 通過。dev server 開在 `http://localhost:3000`（背景 `npx tsx src/index.ts`）。
+資料流：scrape → normalize → categorize → **diy-filter** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **15,778 件商品**、**13,845 張商品卡**、**1,359 組跨店比價**、20 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **22 項檢查全 PASS**。`npm run test` **75 tests**、`npm run build` 通過。dev server 開在 `http://localhost:3000`（`npm run dev`；tsx watch 啟動即爬一次三家）。
+
+### 第十四輪重點（主機板/顯卡側欄樹重構：依實際資料設計層級）
+- **使用者回饋**：主機板底下 DDR5/DDR4 等層級多餘，改在最上層加 CPU 腳位；顯卡底下要分品牌（AIB 廠），顯存容量「不只一種」才需要獨立分層（截圖 `RTX 5090 > 32G` 單一子節點很冗餘）。
+- **主機板樹改為 `CPU 腳位 > 晶片組 > 板廠`**：`detectMotherboardSubcategory` 用 `CHIPSET_SOCKET` 把晶片組映射到腳位（Z890/W890/B860/H810→Intel LGA1851、Z790/B760/H610/W680→LGA1700、W790→LGA4677、X870E/X870/B850/B650→AMD AM5、B550/A520→AM4、TRX50/WRX90→sTR5）；晶片組抓不到時退品名 socket token；移除 DDR/板型層級。64 種子分類，如 `AMD AM5 > B850 > MSI`。
+- **顯卡樹改為 `系列 > 型號 > [多顯存才有容量層] > 品牌`**：`MULTI_VRAM_MODELS`（GT 730 / RTX 3050 / RTX 3060 / RTX 4060 Ti / RTX 5060 Ti / RX 9060 XT / RTX PRO 5000）才插入 VRAM 層，其餘型號直接到品牌；`detectGpuSubcategory` 用 `extractBrand` 抓 AIB 廠。126 種子分類，如 `RTX 5090 > GIGABYTE`、`RTX 5060 Ti > 16G > MSI`。另補 `RX 9070 GRE` 型號（原誤判成 RX 9070 12G 變體）。
+- **排序單一真相注入**：`subcategory-sort.ts` 匯出 `SIDEBAR_ORDERS`（socket/chipset/vendor/gpuSeries/hddType/network/fan），Dashboard `script.ts` 以 `${JSON.stringify(ORDERS)}` 注入，client `compareNodes` 不再自帶清單（消除第八輪殘留的 `Intel Z890` 硬編碼，違反單一真相）。MB flat API 用加權排序 `sr*100000+cr*100+vr`；`vendorRank` 取 `>` 最後一段葉節點，讓 flat API 品牌順序與樹一致。
+- **成效/驗證**：MB 64 子類、GPU 126 子類；`clean-and-rebuild` 套用免重爬；`npm run test` 75 tests、`npm run build`、`npm run audit` 22 項全 PASS；live server API 抽樣 `motherboard`/`gpu` 子分類樹排序正確（`Intel LGA1851 > Z890 > ASUS…`、`RTX 5090 > GIGABYTE`、`RTX 5060 Ti > 16G/8G > 品牌`）。
 
 ### 第十三輪重點（側欄分類準確化 + 儲存/RAM 合併鍵）
 - **側欄大掃除（audit 抓不到的真實污染）**：
