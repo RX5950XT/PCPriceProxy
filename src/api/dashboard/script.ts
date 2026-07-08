@@ -214,9 +214,11 @@ export const DASHBOARD_SCRIPT = `
       'CORE I9', 'ULTRA 9', 'CORE I7', 'ULTRA 7', 'CORE I5', 'ULTRA 5', 'CORE I3',
       'RYZEN 9', 'RYZEN 7', 'RYZEN 5', 'RYZEN 3',
       'E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX',
-      '桌上型 UDIMM', '桌上型', '筆電用 SO-DIMM', '筆電用',
+      '桌上型 UDIMM', '桌上型', '筆電用 SO-DIMM', '筆電用', '伺服器記憶體',
       'M.2 NVME SSD', 'SATA 2.5吋', '行動外接式', 'NAS 專用碟', '企業級硬碟', '一般監控/桌上型', '行動外接硬碟',
       '一體式水冷 (AIO)', '雙塔空冷', '單塔空冷', '下吹式空冷', '散熱膏/配件',
+      // PSU 尺寸（頂層，須早於機殼 'ATX' 以精確命中 'ATX 電源'）
+      'ATX 電源', 'SFX 電源', 'SFX-L 電源', 'TFX 電源', 'Flex 電源',
       '1000W 以上', '750W~1000W', '600W~750W', '600W 以下',
       '80+ 鈦金牌', '80+ 白金牌', '80+ 金牌', '80+ 銀牌', '80+ 銅牌', '80+ 白牌',
       '全模組', '半模組', '直出非模組',

@@ -76,16 +76,21 @@ export const KNOWN_BRANDS = [
   'Samsung', 'WD', 'Seagate', 'Toshiba', 'KIOXIA', 'SanDisk', 'Solidigm',
   // 顯卡 AIB
   'EVGA', 'ZOTAC', 'Sapphire', 'PowerColor', 'XFX', 'PNY', 'Leadtek', 'Inno3D', 'Palit', 'Gainward', 'GALAX', 'COLORFUL', 'Maxsun',
-  // 電源 / 機殼 / 散熱
+  // 電源 / 機殼 / 散熱（XPG 為 ADATA 電競線，機殼以 XPG 名義販售，獨立顯示較易辨識）
   'Seasonic', 'FSP', 'Cooler Master', 'NZXT', 'be quiet!', 'Thermaltake', 'Antec', 'SilverStone', 'Montech', 'In Win',
-  'Lian Li', 'Fractal Design', 'Phanteks', 'JONSBO', 'TRYX',
+  'Lian Li', 'Fractal Design', 'Phanteks', 'JONSBO', 'TRYX', 'XPG', '視博通', 'Power Master', '幾何未來',
+  'Cougar', 'HYTE', 'SAMA', 'Super Flower', '旋剛', 'SADES', 'XIGMATEK', 'YAMA',
   'Noctua', 'Arctic', 'DeepCool', 'ID-COOLING', 'Thermalright',
   // 螢幕（GIGABYTE 已列於主機板段，勿在此重複大小寫變體）
   'BenQ', 'ViewSonic', 'DELL', 'LG', 'Acer', 'AOC', 'Philips',
-  // 周邊
+  // 周邊（鍵鼠）
   'Logitech', 'Razer', 'SteelSeries', 'HyperX', 'darkFlash',
+  'i-Rocks', 'Cherry', 'Keychron', 'Rapoo', 'Havit', 'Turtle Beach', 'EndGame Gear', 'A4Tech', 'Ducky', 'AKKO', 'Pulsar', 'Lamzu', 'Fantech',
+  // 音訊（耳機 / 喇叭 / 音響）
+  'EPOS', 'Edifier', 'Pioneer', 'AIWA', 'ATake', 'Creative', 'Sony', 'JBL', 'Bose', 'Klipsch', 'Audio-Technica', 'Sennheiser', 'Yamaha', 'i.shock',
   // 網通（ASUS 已列於主機板段，不重複）
   'TP-Link', 'Netgear', 'Ubiquiti', 'D-Link', 'Synology', 'QNAP', 'Mercusys',
+  'Zyxel', 'AverMedia', 'TOTOLINK', 'Tenda', 'Cudy', 'Edimax', 'TRENDnet',
   // 軟體 / 其他
   'Microsoft', 'Apple', 'ZhiTai',
 ] as const;
@@ -134,6 +139,37 @@ export const BRAND_ALIASES: Record<string, string> = {
   '羅技': 'Logitech',
   '雷蛇': 'Razer',
   '致態': 'ZhiTai',
+  // 機殼 / 散熱 / 電源品牌中文別名
+  '曜越': 'Thermaltake',
+  '迎廣': 'In Win',
+  '安鈦克': 'Antec',
+  '亞碩': 'Power Master',
+  '銀欣': 'SilverStone',
+  '全漢': 'FSP',
+  '振華': 'Super Flower',
+  '富鈞': 'XIGMATEK',
+  '美洲獅': 'Cougar',
+  '先馬': 'SAMA',
+  '賽德斯': 'SADES',
+  '雅瑪': 'YAMA',
+  // 鍵鼠品牌別名
+  '櫻桃': 'Cherry',
+  '雷柏': 'Rapoo',
+  '海威特': 'Havit',
+  '艾芮克': 'i-Rocks',
+  'IROCKS': 'i-Rocks',
+  '雙飛燕': 'A4Tech',
+  // 音訊品牌別名
+  '漫步者': 'Edifier',
+  '先鋒': 'Pioneer',
+  '愛華': 'AIWA',
+  '森海塞爾': 'Sennheiser',
+  '鐵三角': 'Audio-Technica',
+  // 網通品牌別名
+  '合勤': 'Zyxel',
+  '圓剛': 'AverMedia',
+  '訊舟': 'Edimax',
+  'TOTO-LINK': 'TOTOLINK',
 };
 
 export const USER_AGENTS = [

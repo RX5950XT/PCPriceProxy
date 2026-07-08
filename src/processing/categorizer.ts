@@ -7,7 +7,8 @@ import { extractBrand } from './normalizer.js';
  * Used when the scraper's category mapping is insufficient.
  */
 const CATEGORY_KEYWORDS: Record<ProductCategory, readonly string[]> = {
-  [ProductCategory.CPU]: ['處理器', 'CPU', 'Processor', 'Core i', 'Ryzen'],
+  // 'Core i' 不可用：會被水冷「Core II」子字串誤中；改列具體型號 token
+  [ProductCategory.CPU]: ['處理器', 'CPU', 'Processor', 'Core i3', 'Core i5', 'Core i7', 'Core i9', 'Core Ultra', 'Ryzen'],
   [ProductCategory.MOTHERBOARD]: ['主機板', '主板', 'Motherboard'],
   [ProductCategory.GPU]: ['顯示卡', '顯卡', '繪圖卡', 'Graphics', 'GeForce', 'Radeon'],
   [ProductCategory.RAM]: ['記憶體', 'Memory', 'DDR'],
@@ -15,7 +16,7 @@ const CATEGORY_KEYWORDS: Record<ProductCategory, readonly string[]> = {
   [ProductCategory.HDD]: ['傳統硬碟', '硬碟', 'HDD', 'Hard Drive'],
   [ProductCategory.PSU]: ['電源供應器', '電源', 'Power Supply', 'PSU'],
   [ProductCategory.CASE]: ['機殼', 'Case', 'Chassis'],
-  [ProductCategory.COOLER]: ['散熱器', 'CPU散熱', 'Cooler', 'AIO', '水冷', '空冷', '塔散', '下吹式', '導管', '一體式'],
+  [ProductCategory.COOLER]: ['散熱器', 'CPU散熱', 'Cooler', 'AIO', '水冷', '空冷', '塔散', '下吹式', '導管', '一體式', 'Liquid', '冷排', '冷頭'],
   [ProductCategory.MONITOR]: ['螢幕', '顯示器', 'Monitor', '電競螢幕'],
   [ProductCategory.KEYBOARD]: ['鍵盤', '鍵鼠組', 'Keyboard'],
   [ProductCategory.MOUSE]: ['滑鼠', 'Mouse'],
@@ -65,7 +66,9 @@ export function isCpuContaminated(name: string): boolean {
   const excludes = [
     '筆電', '筆記型', 'LAPTOP', '掌機', 'CLAW', 'ALLY', 'DECK', 'Z1', 'Z2', 'RYZEN Z', 'NUC', 'MINI PC', '迷你電腦', '準系統',
     '工作站', '套裝電腦', 'AIO PC', '保護蓋', '扣具', '防彎', '散熱器', '水冷', '防彎扣具', '防壓框',
-    '螺絲', '轉接卡', '保護套'
+    '螺絲', '轉接卡', '保護套',
+    // 水冷（MasterLiquid「Core II」子字串誤中 CPU）與導熱介質配件（相變導熱貼「適用於CPU」誤中 CPU）
+    'LIQUID', '冷頭', '冷排', '導熱貼', '導熱膏', '散熱膏', '相變'
   ];
   return excludes.some(ex => upper.includes(ex));
 }
@@ -149,7 +152,9 @@ export function isPsuContaminated(name: string): boolean {
   // 電源「線材 / 配件 / 測試器」排除，避免被 "電源" 關鍵字誤收
   const excludes = [
     '延長線', '分接', '電源線', '排插', '測試器', '轉接', '不斷電', 'UPS', '保護蓋', '線材',
-    '行動電源', '快充', '充電', '磁吸', 'MAH', 'GAN', '音響', '喇叭', '藍牙', '藍芽'
+    '行動電源', '快充', '充電', '磁吸', 'MAH', 'GAN', '音響', '喇叭', '藍牙', '藍芽',
+    // 「電源」誤收的配件：電源擴充線、免電源轉換線、硬碟外接盒（獨立電源開關/抽換/多 Bay）
+    '擴充線', '轉換', '外接盒', '抽換', '硬碟外接', '獨立電源開關', 'BAY'
   ];
   return excludes.some(ex => upper.includes(ex));
 }
@@ -185,7 +190,7 @@ export function isFanContaminated(name: string): boolean {
 
 /** NETWORK 來源常混入印表機、無線充電座、無線耳麥、無線鍵鼠組、掌機、HDMI 線等「無線/Wi-Fi」誤中品。 */
 export function isNetworkContaminated(name: string): boolean {
-  return /印表機|複合機|事務機|連續供墨|充電座|充電盤|充電器|行動電源|耳機|耳麥|鍵鼠|鍵盤|掌機|ALLY|CLAW\s*A\d|HDMI|傳輸線/i.test(name);
+  return /印表機|複合機|事務機|連續供墨|充電座|充電盤|充電器|行動電源|耳機|耳麥|鍵鼠|鍵盤|滑鼠|遊戲鼠|掌機|ALLY|CLAW\s*A\d|HDMI|傳輸線|喇叭|聲霸|SOUNDBAR|擴音機|工作站/i.test(name);
 }
 
 /**
@@ -203,7 +208,7 @@ export function detectPriceCondition(name: string): string | null {
 }
 
 // CPU 型號正則（含尾碼如 9800X3D / 9500F / Core 5 210H），供整機 / 筆電 簽章判定
-const RE_CPU_MODEL = /Ryzen\s*(AI\s*)?[3579]|Core\s*(Ultra\s*)?[3579]|Core\s*[3579]\s*\d{2,3}H|Core\s*Ultra|\bC[3579][\s-]?\d{3}H\b|\b[ui][3579][\s-]?\d{3,5}[A-Z0-9]{0,3}|\bR[3579][\s-]?\d{3,4}[A-Z0-9]{0,4}|Ultra\s*[3579]\s*\d|Threadripper|\bN[12]\d{2}\b|\bG\d{4}\b/i;
+const RE_CPU_MODEL = /Ryzen\s*(AI\s*)?[3579]|Core\s*(Ultra\s*)?[3579]|Core\s*[3579]\s*\d{2,3}H|Core\s*Ultra|\bC[3579][\s-]?\d{3}H\b|\b[ui][3579][\s-]?\d{3,5}[A-Z0-9]{0,3}|\bR[3579][\s-]?\d{3,4}[A-Z0-9]{0,4}|Ultra\s*[3579][\s-]?\d|Threadripper|\bN[12]\d{2}\b|\bG\d{4}\b/i;
 const RE_STORAGE = /\b\d{3}\s?G(?:B)?\b|\b\d\s?T(?:B)?\b|\bSSD\b|512G|PCIe|M\.2/i;
 // 型號數字後不可用 \b：「RTX 5070Ti / RX9070XT」的 Ti/XT 直接黏尾會使 \b 失效而漏判
 const RE_GPU_MODEL = /\b(RTX|GTX|GT)\s?\d{3,4}(?!\d)|\bRX\s?\d{3,4}(?!\d)|\bArc\s?[AB]\d{3}(?!\d)/i;
@@ -778,14 +783,18 @@ function detectMotherboardSubcategory(name: string): string | null {
 function detectRamSubcategory(name: string): string | null {
   const upperName = name.toUpperCase();
 
+  // 伺服器/工作站記憶體（ECC / Registered / R-DIMM）不可混入桌上型 UDIMM（$1.5萬~16萬，會污染消費級比價）
   let device = '桌上型 UDIMM';
-  if (/\b(NB|Laptop|筆電|SO-DIMM|SODIMM)\b/i.test(name) || upperName.includes('筆電用') || upperName.includes('SO-DIMM')) {
+  if (/\bECC\b|R-?DIMM|LRDIMM|REGISTERED|伺服器/i.test(name)) {
+    device = '伺服器記憶體';
+  } else if (/\b(NB|Laptop|筆電|SO-DIMM|SODIMM)\b/i.test(name) || upperName.includes('筆電用') || upperName.includes('SO-DIMM')) {
     device = '筆電用 SO-DIMM';
   }
 
+  // D4/D5 要用詞邊界：伺服器料號（KSM64R52BD4）內的「BD4」子字串會誤判世代
   let ddr = 'DDR5';
-  if (upperName.includes('DDR4') || upperName.includes('D4')) ddr = 'DDR4';
-  else if (upperName.includes('DDR5') || upperName.includes('D5')) ddr = 'DDR5';
+  if (/DDR4|\bD4\b/i.test(name)) ddr = 'DDR4';
+  else if (/DDR5|\bD5\b/i.test(name)) ddr = 'DDR5';
 
   let cap: string | null = null;
   const dualMatch = name.match(/(\d+)\s*(GB|G)\s*[*xX]\s*2/i);
@@ -911,16 +920,36 @@ function detectCoolerSubcategory(name: string): string | null {
   return hierarchy(type, height, led);
 }
 
+/** 瓦數藏在型號（UD750GM / Ai1600T / SF750）時，取黏在字母旁、且為 50 倍數的合理瓦數（450~2000W）。 */
+function psuWattFromModel(name: string): number | null {
+  for (const m of name.matchAll(/(\d{3,4})/g)) {
+    const w = parseInt(m[1], 10);
+    if (w >= 450 && w <= 2000 && w % 50 === 0) return w;
+  }
+  return null;
+}
+
+/** PSU 尺寸規格（裝機先看機殼相容；側欄最上層）。SFX-L 要在 SFX 前判，且早於 ATX（SFX 電源常標 ATX3.0 規格）。 */
+function detectPsuForm(name: string): string {
+  if (/SFX-?L\b|SFX-L規格|SFXL/i.test(name)) return 'SFX-L 電源';
+  if (/\bSFX\b|SFX規格/i.test(name)) return 'SFX 電源';
+  if (/\bTFX\b/i.test(name)) return 'TFX 電源';
+  if (/\bFLEX\b|FLEX\s*ATX|\b1U\b/i.test(name)) return 'Flex 電源';
+  return 'ATX 電源';
+}
+
 function detectPsuSubcategory(name: string): string | null {
   const upperName = name.toUpperCase();
 
+  const form = detectPsuForm(name);
+
   let wattTier: string | null = null;
   const wattMatch = name.match(/\b(\d{3,4})\s*W\b/i);
-  if (wattMatch) {
-    const w = parseInt(wattMatch[1], 10);
-    if (w < 600) wattTier = '600W 以下';
-    else if (w < 750) wattTier = '600W~750W';
-    else if (w < 1000) wattTier = '750W~1000W';
+  const watt = wattMatch ? parseInt(wattMatch[1], 10) : psuWattFromModel(name);
+  if (watt !== null) {
+    if (watt < 600) wattTier = '600W 以下';
+    else if (watt < 750) wattTier = '600W~750W';
+    else if (watt < 1000) wattTier = '750W~1000W';
     else wattTier = '1000W 以上';
   }
 
@@ -937,23 +966,46 @@ function detectPsuSubcategory(name: string): string | null {
   else if (/半模組|SEMI\s*MODULAR|半模/i.test(name)) modular = '半模組';
   else if (/直出|非模組|NON\s*MODULAR/i.test(name)) modular = '直出非模組';
 
-  return hierarchy(wattTier, rating, modular);
+  return hierarchy(form, wattTier, rating, modular);
 }
 
+// 機殼系列（品牌下的產品線）。以品牌為範圍避免跨廠系列名碰撞；未知系列僅顯示到品牌層。
+const CASE_SERIES: Record<string, ReadonlyArray<readonly [RegExp, string]>> = {
+  Thermaltake: [[/The Tower|\bTower\s?\d/i, 'The Tower'], [/\bView\b/i, 'View'], [/\bCeres\b/i, 'Ceres'], [/\bDivider\b/i, 'Divider'], [/\bVersa\b/i, 'Versa'], [/\bS\d{3}\b/i, 'S 系列'], [/\bH\d{3}\b/i, 'H 系列'], [/\bCore\b/i, 'Core']],
+  'Lian Li': [[/O11/i, 'O11'], [/Lancool/i, 'Lancool'], [/\bA3\b/i, 'A3'], [/\bA4\b/i, 'A4'], [/\bV\d{3}\b/i, 'V 系列'], [/\bDAN\b/i, 'DAN']],
+  'Fractal Design': [[/\bNorth\b/i, 'North'], [/Meshify/i, 'Meshify'], [/Define/i, 'Define'], [/\bPop\b/i, 'Pop'], [/Torrent/i, 'Torrent'], [/\bRidge\b/i, 'Ridge'], [/\bTerra\b/i, 'Terra'], [/\bFocus\b/i, 'Focus'], [/\bNode\b/i, 'Node']],
+  Corsair: [[/\biCUE\b/i, 'iCUE'], [/\bFrame\b/i, 'Frame'], [/\b\d{4}[DX]\b/i, 'xxxxD 系列'], [/Crystal/i, 'Crystal'], [/Obsidian/i, 'Obsidian'], [/Carbide/i, 'Carbide']],
+  'Cooler Master': [[/MasterBox/i, 'MasterBox'], [/MasterFrame/i, 'MasterFrame'], [/\bHAF\b/i, 'HAF'], [/\bNR\d{3}\b/i, 'NR 系列'], [/Cosmos/i, 'Cosmos'], [/\bQube\b/i, 'Qube'], [/\bTD\d{3}\b/i, 'TD 系列'], [/\bElite\b/i, 'Elite']],
+  NZXT: [[/\bH\d{1,3}\b/i, 'H 系列'], [/\bFlow\b/i, 'Flow']],
+  'be quiet!': [[/Pure Base/i, 'Pure Base'], [/Silent Base/i, 'Silent Base'], [/Dark Base/i, 'Dark Base'], [/Shadow Base/i, 'Shadow Base'], [/Light Base/i, 'Light Base']],
+  Phanteks: [[/Eclipse/i, 'Eclipse'], [/Enthoo/i, 'Enthoo'], [/\bNV\d{1,3}\b/i, 'NV 系列'], [/\bG\d{3}\b/i, 'G 系列'], [/\bD30\b/i, 'D30'], [/\bXT\b/i, 'XT']],
+  MSI: [[/\bMEG\b/i, 'MEG'], [/\bMPG\b/i, 'MPG'], [/\bMAG\b/i, 'MAG'], [/\bPANO\b/i, 'PANO'], [/\bFORGE\b/i, 'FORGE'], [/\bVELOX\b/i, 'VELOX'], [/\bGUNGNIR\b/i, 'GUNGNIR']],
+  ASUS: [[/\bROG\b/i, 'ROG'], [/\bTUF\b/i, 'TUF'], [/\bPrime\b|\bAP\d{3}\b/i, 'Prime']],
+  Montech: [[/\bKING\b/i, 'KING'], [/\bSKY\b/i, 'SKY'], [/\bTITAN\b/i, 'TITAN'], [/\bAIR\b/i, 'AIR'], [/\bXR\b/i, 'XR'], [/\bHS\b/i, 'HS']],
+  'In Win': [[/Chopin/i, 'Chopin'], [/Dubili/i, 'Dubili'], [/ModFree/i, 'ModFree'], [/\bA1\b/i, 'A1'], [/\bF\d\b/i, 'F 系列']],
+  SilverStone: [[/\bFARA\b/i, 'FARA'], [/\bSETA\b/i, 'SETA'], [/\bSUGO\b/i, 'SUGO'], [/Precision/i, 'Precision'], [/Grandia/i, 'Grandia'], [/\bAlta\b/i, 'Alta'], [/Fujin/i, 'Fujin'], [/Raven/i, 'Raven']],
+  DeepCool: [[/\bCH\d{3}\b/i, 'CH 系列'], [/\bCK\d{3}\b/i, 'CK 系列'], [/\bCG\d{3}\b/i, 'CG 系列'], [/Macube/i, 'Macube'], [/Morpheus/i, 'Morpheus'], [/MATREXX/i, 'MATREXX'], [/\bCC\d{3}\b/i, 'CC 系列']],
+  Antec: [[/\bDF\d{3}\b/i, 'DF 系列'], [/\bDP\d{3}\b/i, 'DP 系列'], [/\bNX\d{3}\b/i, 'NX 系列'], [/\bP\d{2,3}\b/i, 'P 系列'], [/\bFlux\b/i, 'Flux'], [/Constellation/i, 'Constellation'], [/Performance/i, 'Performance']],
+  JONSBO: [[/\bD\d{2}\b/i, 'D 系列'], [/\bTK-?\d/i, 'TK 系列'], [/\bZ\d{2}\b/i, 'Z 系列'], [/\bVR\d/i, 'VR 系列'], [/\bN\d\b/i, 'N 系列 (NAS)'], [/\bU\d\b/i, 'U 系列'], [/\bC\d\b/i, 'C 系列']],
+  darkFlash: [[/\bDLX\b/i, 'DLX'], [/\bDLM\b/i, 'DLM'], [/\bDRX\b/i, 'DRX'], [/Blitz/i, 'Blitz'], [/\bDK\b/i, 'DK']],
+  XPG: [[/Valor/i, 'Valor'], [/Invader/i, 'Invader'], [/Starker/i, 'Starker'], [/Battlecruiser/i, 'Battlecruiser'], [/Cruiser/i, 'Cruiser'], [/Defender/i, 'Defender']],
+  '幾何未來': [[/Model/i, 'Model'], [/Hako/i, 'Hako']],
+};
+
+function detectCaseSeries(name: string, brand: string | null): string | null {
+  if (!brand) return null;
+  const table = CASE_SERIES[brand];
+  if (!table) return null;
+  for (const [re, label] of table) {
+    if (re.test(name)) return label;
+  }
+  return null;
+}
+
+// 機殼側欄：品牌 > 系列（依實際資料以品牌分組，品牌下再依產品線排序）。
 function detectCaseSubcategory(name: string): string | null {
-  const upperName = name.toUpperCase();
-
-  let tower: string | null = null;
-  if (/E-ATX|EATX|全塔|FULL\s*TOWER/i.test(name)) tower = '全塔 (E-ATX)';
-  else if (/M-ATX|MICRO-ATX|MATX/i.test(name)) tower = 'Micro-ATX 機殼';
-  else if ((/ITX|MINI/i.test(name)) && !upperName.includes('ATX')) tower = 'Mini-ITX 機殼';
-  else if (/ATX|中塔|MID\s*TOWER/i.test(name)) tower = 'ATX 中塔';
-
-  let side: string | null = null;
-  if (/玻璃透側|鋼化玻璃|TEMPERED\s*GLASS|透側|玻璃側板/i.test(name)) side = '玻璃透側';
-  else if (/網孔|MESH|網通風/i.test(name)) side = '網孔通風';
-
-  return hierarchy(tower, side);
+  const brand = extractBrand(name) ?? null;
+  return hierarchy(brand, detectCaseSeries(name, brand));
 }
 
 function detectMonitorSubcategory(name: string): string | null {
@@ -1008,27 +1060,35 @@ export function detectSubcategory(category: ProductCategory, name: string): stri
 
   const upperName = name.toUpperCase();
 
+  // 周邊（鍵鼠/耳機/喇叭/網通）：品牌 > 類型；抓不到品牌時退回只有類型層。
+  const brand = extractBrand(name) ?? null;
+  const withBrand = (type: string | null): string | null => (brand ? hierarchy(brand, type) : type);
+
   if (category === ProductCategory.KEYBOARD) {
-    if (upperName.includes('無線') || upperName.includes('WIRELESS')) return '無線鍵盤';
-    if (upperName.includes('機械')) return '機械式鍵盤';
-    return '一般鍵盤';
+    let type = '一般鍵盤';
+    if (upperName.includes('無線') || upperName.includes('WIRELESS')) type = '無線鍵盤';
+    else if (upperName.includes('機械')) type = '機械式鍵盤';
+    return withBrand(type);
   }
 
   if (category === ProductCategory.MOUSE) {
-    if (upperName.includes('無線') || upperName.includes('WIRELESS')) return '無線滑鼠';
-    if (upperName.includes('電競') || upperName.includes('GAMING')) return '電競滑鼠';
-    return '一般滑鼠';
+    let type = '一般滑鼠';
+    if (upperName.includes('無線') || upperName.includes('WIRELESS')) type = '無線滑鼠';
+    else if (upperName.includes('電競') || upperName.includes('GAMING')) type = '電競滑鼠';
+    return withBrand(type);
   }
 
   if (category === ProductCategory.HEADSET) {
-    if (upperName.includes('無線') || upperName.includes('WIRELESS') || upperName.includes('藍牙') || upperName.includes('BLUETOOTH')) return '無線耳機';
-    if (upperName.includes('電競') || upperName.includes('GAMING')) return '電競耳機';
-    return '一般耳機 / 麥克風';
+    let type = '一般耳機 / 麥克風';
+    if (upperName.includes('無線') || upperName.includes('WIRELESS') || upperName.includes('藍牙') || upperName.includes('BLUETOOTH')) type = '無線耳機';
+    else if (upperName.includes('電競') || upperName.includes('GAMING')) type = '電競耳機';
+    return withBrand(type);
   }
 
   if (category === ProductCategory.SPEAKER) {
-    if (upperName.includes('藍牙') || upperName.includes('BLUETOOTH') || upperName.includes('無線') || upperName.includes('WIRELESS')) return '藍牙 / 無線喇叭';
-    return '電腦喇叭';
+    let type = '電腦喇叭';
+    if (upperName.includes('藍牙') || upperName.includes('BLUETOOTH') || upperName.includes('無線') || upperName.includes('WIRELESS')) type = '藍牙 / 無線喇叭';
+    return withBrand(type);
   }
 
   if (category === ProductCategory.FAN) {
@@ -1040,14 +1100,16 @@ export function detectSubcategory(category: ProductCategory, name: string): stri
   }
 
   if (category === ProductCategory.NETWORK) {
-    if (/攝影機|WEBCAM|視訊鏡頭/i.test(name)) return '網路攝影機';
-    if (/MESH|ZENWIFI|VELOP|\bDECO\b/i.test(name)) return '無線路由器 > Mesh 網狀';
-    if (/路由器|分享器|ROUTER/i.test(name)) return '無線路由器';
-    if (/PCE-|PCI-?E|網路卡|網卡|LAN\s*CARD|藍牙接收|藍芽接收|USB.{0,8}(藍牙|藍芽|WI-?FI)/i.test(name)) return '網路卡 / 接收器';
-    if (/交換器|SWITCH|\bHUB\b/i.test(name)) return '交換器';
-    if (/NAS|SYNOLOGY|群暉|QNAP|威聯通|華芸|ASUSTOR|DISKSTATION/i.test(name)) return 'NAS 網路儲存';
-    if (/網路線|CAT\.?\s*[5-8]/i.test(name)) return '網路線材';
-    return '其他網通設備';
+    // 網通：品牌 > 設備類型（品牌抓不到時退回只有設備類型層）
+    let type = '其他網通設備';
+    if (/攝影機|WEBCAM|視訊鏡頭/i.test(name)) type = '網路攝影機';
+    else if (/MESH|ZENWIFI|VELOP|\bDECO\b/i.test(name)) type = '無線路由器 > Mesh 網狀';
+    else if (/路由器|分享器|ROUTER/i.test(name)) type = '無線路由器';
+    else if (/PCE-|PCI-?E|網路卡|網卡|LAN\s*CARD|藍牙接收|藍芽接收|USB.{0,8}(藍牙|藍芽|WI-?FI)/i.test(name)) type = '網路卡 / 接收器';
+    else if (/交換器|SWITCH|\bHUB\b/i.test(name)) type = '交換器';
+    else if (/NAS|SYNOLOGY|群暉|QNAP|威聯通|華芸|ASUSTOR|DISKSTATION/i.test(name)) type = 'NAS 網路儲存';
+    else if (/網路線|CAT\.?\s*[5-8]/i.test(name)) type = '網路線材';
+    return withBrand(type);
   }
 
   if (category === ProductCategory.OS) {

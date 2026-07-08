@@ -255,10 +255,11 @@ describe('第十三輪：HDD/FAN/NETWORK 污染與子分類修正', () => {
   });
 
   it('NETWORK 子分類拆分：攝影機 / NAS / Mesh / 網卡', () => {
-    expect(categorizeProduct(makeProduct('圓剛 PW315 高畫質定焦網路攝影機/AI人臉追蹤', ProductCategory.NETWORK)).subcategory).toBe('網路攝影機');
-    expect(categorizeProduct(makeProduct('Synology DS1823xs+【8Bay】AMD Ryzen V1780B 四核(3.35GHz)/8GB/10Gb*1', ProductCategory.NETWORK)).subcategory).toBe('NAS 網路儲存');
-    expect(categorizeProduct(makeProduct('華碩 ZENWIFI BT8 兩入組 (BE14000/Wi-Fi 7/三頻/MESH/隱藏八天線/2.5Gb)', ProductCategory.NETWORK)).subcategory).toBe('無線路由器 > Mesh 網狀');
-    expect(categorizeProduct(makeProduct('TP-LINK Archer TBE400E ( BE6500 / Wi-Fi 7 / 雙天線 / 藍牙5.4 / PCI-E)', ProductCategory.NETWORK)).subcategory).toBe('網路卡 / 接收器');
+    // 網通改「品牌 > 設備類型」（品牌抓不到才退回只有類型層）
+    expect(categorizeProduct(makeProduct('圓剛 PW315 高畫質定焦網路攝影機/AI人臉追蹤', ProductCategory.NETWORK)).subcategory).toBe('AverMedia > 網路攝影機');
+    expect(categorizeProduct(makeProduct('Synology DS1823xs+【8Bay】AMD Ryzen V1780B 四核(3.35GHz)/8GB/10Gb*1', ProductCategory.NETWORK)).subcategory).toBe('Synology > NAS 網路儲存');
+    expect(categorizeProduct(makeProduct('華碩 ZENWIFI BT8 兩入組 (BE14000/Wi-Fi 7/三頻/MESH/隱藏八天線/2.5Gb)', ProductCategory.NETWORK)).subcategory).toBe('ASUS > 無線路由器 > Mesh 網狀');
+    expect(categorizeProduct(makeProduct('TP-LINK Archer TBE400E ( BE6500 / Wi-Fi 7 / 雙天線 / 藍牙5.4 / PCI-E)', ProductCategory.NETWORK)).subcategory).toBe('TP-Link > 網路卡 / 接收器');
   });
 
   it('M.2 外接盒（USB10G 無容量）不可留在 SSD；USB10G 不可誤判為容量', () => {
@@ -316,5 +317,43 @@ describe('第十四輪：主機板腳位樹與 GPU 品牌層', () => {
   it('RX 9070 GRE 是獨立型號，不與 RX 9070 混同', () => {
     const gre = categorizeProduct(makeProduct('藍寶石 PULSE 脈動 RX 9070 GRE 12GB D6 (std:2790MHz/雙風扇)', ProductCategory.GPU));
     expect(gre.subcategory).toBe('AMD RX 9000系列 > RX 9070 GRE > Sapphire');
+  });
+});
+
+describe('第十五輪：除污與品牌分類', () => {
+  it('AIO 水冷「Core II」不可誤中 CPU 關鍵字 Core i，應歸散熱器', () => {
+    const aio = categorizeProduct(makeProduct('酷碼 MasterLiquid 240 Core II ARGB 黑 (240mm/雙腔式冷頭/CRYOFUZE散熱膏/12cm風扇*2)', ProductCategory.CPU));
+    expect(aio.category).toBe(ProductCategory.COOLER);
+  });
+
+  it('電源擴充線 / 免電源轉換線 不可因「電源」誤收為 PSU', () => {
+    const cable = categorizeProduct(makeProduct('銀欣 1轉3 PWM 風扇電源擴充線 100mm(SST-CPF02)', ProductCategory.PSU));
+    expect(cable.category).not.toBe(ProductCategory.PSU);
+  });
+
+  it('PSU：瓦數藏型號可解、SFX-L 尺寸成頂層', () => {
+    const hidden = categorizeProduct(makeProduct('技嘉 UD750GM PG5 V2 (80+金牌/ATX3.1/PCIe 5.1/HYB靜音風扇/全模組/全日系/十年保)', ProductCategory.PSU));
+    expect(hidden.subcategory).toBe('ATX 電源 > 750W~1000W > 80+ 金牌 > 全模組');
+    const sfxl = categorizeProduct(makeProduct('華碩 ROG LOKI 850W 雙8/白金/ATX3.0(PCIe 5.0)/ARGB風扇/10年保【SFX-L規格】', ProductCategory.PSU));
+    expect(sfxl.subcategory).toBe('SFX-L 電源 > 750W~1000W > 80+ 白金牌');
+  });
+
+  it('伺服器 ECC RDIMM 不混入桌上型；料號 BD4 不可誤判 D5 為 DDR4', () => {
+    const reg = categorizeProduct(makeProduct('金士頓32GB 5600MT/s D5 ECC Reg CL46 DIMM 2R*8 Hynix A(KSM56R46BD8/32HA)', ProductCategory.RAM));
+    expect(reg.subcategory).toBe('伺服器記憶體 > DDR5 > 32G > 5600MHz');
+    const bd4 = categorizeProduct(makeProduct('金士頓96GB 6400MT/s D5 ECC Reg CL52 DIMM 2R*4 Micron C(KSM64R52BD4/96MC)', ProductCategory.RAM));
+    expect(bd4.subcategory).toBe('伺服器記憶體 > DDR5 > 96G > 6400MHz');
+  });
+
+  it('機殼改「品牌 > 系列」，中文品牌走別名', () => {
+    const tt = categorizeProduct(makeProduct('曜越 View 390 Air 黑 顯卡長42/CPU高16/鷗翼式曲面玻璃/分艙設計/支援背插/ATX', ProductCategory.CASE));
+    expect(tt.subcategory).toBe('Thermaltake > View');
+  });
+
+  it('鍵盤 / 喇叭改「品牌 > 類型」', () => {
+    const kb = categorizeProduct(makeProduct('keychron K8 Max 80% 三模機械鍵盤 鋁框 RGB Mac/Win 熱插拔 Super紅軸', ProductCategory.KEYBOARD));
+    expect(kb.subcategory).toBe('Keychron > 機械式鍵盤');
+    const spk = categorizeProduct(makeProduct('漫步者Edifier R2750DB 三音路喇叭 /Bluetooth V4.', ProductCategory.SPEAKER));
+    expect(spk.subcategory).toBe('Edifier > 藍牙 / 無線喇叭');
   });
 });

@@ -3,8 +3,18 @@
 ## 專案現況
 PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。
 
-## 系統運作狀態（已驗證，2026-07-07）
-資料流：scrape → normalize → categorize → **diy-filter** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **15,778 件商品**、**13,845 張商品卡**、**1,359 組跨店比價**、20 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **22 項檢查全 PASS**。`npm run test` **75 tests**、`npm run build` 通過。dev server 開在 `http://localhost:3000`（`npm run dev`；tsx watch 啟動即爬一次三家）。
+## 系統運作狀態（已驗證，2026-07-08）
+資料流：scrape → normalize → categorize → **diy-filter** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **16,023 件商品**、**14,031 張商品卡**、**1,390 組跨店比價**、20 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **22 項檢查全 PASS**。`npm run test` **81 tests**、`npm run build` 通過。dev server 開在 `http://localhost:3000`（`npm run dev`；tsx watch 啟動即爬一次三家）。
+
+### 第十五輪重點（全類別稽核除污 + PSU/RAM 結構 + 機殼/周邊品牌分類）
+- **使用者回饋**：逐類別檢查是否真爬到且正確分類、疑似「無中生有」；記憶體是否還有伺服器類、電源要分 SFX 尺寸、機殼依品牌再依系列、鍵鼠/耳機/喇叭/網通依品牌分類。
+- **稽核結論**：資料是真的（三來源 source_url 全有）；但確有誤分類污染——CPU 混入 AIO 水冷（`MasterLiquid`「Core II」誤中關鍵字 `Core i`）與相變導熱貼（`適用於CPU` 誤中）；PSU 混入電源擴充線/免電源轉換線/硬碟外接盒（232 筆空子類多是這些）；RAM 伺服器 ECC RDIMM（$1.5萬~16萬）被錯標桌上型 UDIMM；network 混入 Edifier 聲霸/A4 滑鼠/HP 工作站。
+- **除污修正**：CPU 關鍵字改列具體 `Core i3/5/7/9`＋`isCpuContaminated` 補水冷/導熱貼；COOLER 關鍵字補 `Liquid/冷排/冷頭`；`isPsuContaminated` 補 擴充線/轉換/外接盒/抽換/Bay；`isNetworkContaminated` 補 滑鼠/喇叭/聲霸/工作站；`RE_CPU_MODEL` 支援 `Ultra7-265` 連字號（HP 工作站歸整機）。CPU/PSU 空子類 5/232→0。
+- **PSU 結構**：子分類改 `尺寸 > 瓦數 > 認證 > 模組`（`detectPsuForm` SFX-L→SFX→TFX→Flex→ATX，須早於 ATX）；瓦數藏型號（UD750GM→750W、Ai1600T→1600W）用 `psuWattFromModel`（黏字母、50 倍數、450~2000W）。ATX 977 / SFX 42 / SFX-L 10。
+- **RAM 結構**：頂層新增「伺服器記憶體」（ECC/RDIMM/Reg，19 筆移出桌上型）；修正 D4/D5 世代偵測改用詞邊界（料號 `KSM64R52BD4` 內 `BD4` 會把 D5 誤判成 DDR4）。
+- **機殼＝`品牌 > 系列`**：`CASE_SERIES` 品牌範圍表（Thermaltake View/The Tower、Lian Li O11/Lancool、Fractal Meshify/Define、Corsair iCUE、Cooler Master MasterBox/HAF、MSI MAG/MPG…）；未知系列只到品牌。補品牌別名（曜越/迎廣/銀欣/全漢/振華/富鈞/Cougar/HYTE/SAMA…）後機殼無品牌 319→89（95% 有品牌）。
+- **鍵鼠/耳機/喇叭/網通＝`品牌 > 類型`**：`withBrand()` 抓不到品牌退回類型層（0 遺漏）；擴充 `KNOWN_BRANDS`＋`BRAND_ALIASES`（i-Rocks/Cherry/Keychron/Rapoo/Edifier漫步者/EPOS/AIWA愛華/合勤Zyxel/圓剛AverMedia/TOTOLINK…）。喇叭無品牌 78%→~2%。
+- **驗證**：`npm run test` **81 tests**（+6）、`npm run build`、`clean-and-rebuild`（1350 筆重分類、8 筆移除）、`npm run audit` **22 項全 PASS**；live API 抽樣 `SFX-L 電源 > 750W~1000W > 80+ 白金牌`、`伺服器記憶體 > DDR5 > …`、`Lian Li > O11`、`Logitech > 無線`、`Edifier > 藍牙 / 無線喇叭` 皆正確。
 
 ### 第十四輪重點（主機板/顯卡側欄樹重構：依實際資料設計層級）
 - **使用者回饋**：主機板底下 DDR5/DDR4 等層級多餘，改在最上層加 CPU 腳位；顯卡底下要分品牌（AIB 廠），顯存容量「不只一種」才需要獨立分層（截圖 `RTX 5090 > 32G` 單一子節點很冗餘）。

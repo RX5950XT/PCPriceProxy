@@ -1,3 +1,26 @@
+# PCPriceProxy — 第十五輪：全類別稽核除污 + PSU/RAM 結構 + 機殼/周邊品牌分類
+
+## 本輪需求（使用者）
+- [x] 逐類別檢查是否真爬到資料且正確分類，找出疑似「無中生有」。
+- [x] 記憶體是否還有「伺服器」類（伺服器 RDIMM 不可混桌上型）。
+- [x] 電源供應器要分 SFX 尺寸。
+- [x] 機殼依品牌分組、品牌下依系列排序。
+- [x] 鍵盤/滑鼠/耳機/麥克風/喇叭/音響/網通依品牌分類。
+
+## 執行計畫
+- [x] 稽核：三來源 × 分類計數、source_url 覆蓋、各類別空子分類抽樣 → 確認資料為真、定位污染。
+- [x] 週期 A 除污：CPU 關鍵字改具體 token + 補水冷/導熱貼過濾；COOLER 補 Liquid/冷排/冷頭；PSU 補 擴充線/轉換/外接盒/抽換/Bay；network 補 滑鼠/喇叭/聲霸/工作站；`RE_CPU_MODEL` 吃 `Ultra7-265`。
+- [x] 週期 A 結構：PSU `尺寸 > 瓦數 > 認證 > 模組` + `psuWattFromModel`；RAM 加「伺服器記憶體」層 + D4/D5 詞邊界；client `genericOrder` 補 PSU 尺寸與伺服器 RAM。
+- [x] 週期 B 品牌：擴充 `KNOWN_BRANDS`＋`BRAND_ALIASES`（機殼/鍵鼠/音訊/網通約 40 個）；機殼 `品牌 > 系列`（`CASE_SERIES`）；鍵鼠/耳機/喇叭/網通 `品牌 > 類型`（`withBrand`）。
+- [x] 測試：更新 4 條 network 斷言 + 新增 6 條（CPU 除污/PSU 藏瓦數+SFX/RAM 伺服器+BD4/機殼品牌系列/周邊品牌）。
+- [x] 驗證：81 tests、build、clean-and-rebuild、audit 22 項全 PASS、live API 抽樣。
+
+## 本輪回顧
+- CPU/PSU 空子類 5/232→0；PSU 尺寸 ATX 977/SFX 42/SFX-L 10；RAM 伺服器 19 筆移出桌上型；機殼無品牌 319→89（95%）；喇叭無品牌 78%→~2%。
+- 「無中生有」根因是他品類詞誤中關鍵字（`Core II`→`Core i`、`電源`→擴充線/外接盒、`無線`→聲霸/滑鼠）與料號子字串誤判（`BD4`→DDR4）。
+
+---
+
 # PCPriceProxy — 第十四輪：主機板/顯卡側欄樹重構
 
 ## 本輪需求（使用者）
