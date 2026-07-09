@@ -201,6 +201,13 @@ export const DASHBOARD_SCRIPT = `
       if (cat === 'hdd') return orderedRank(label, SIDEBAR_ORDERS.hddType);
       if (cat === 'network') return orderedRank(label, SIDEBAR_ORDERS.network);
       if (cat === 'fan') return orderedRank(label, SIDEBAR_ORDERS.fan);
+      if (cat === 'cable') return orderedRank(label, SIDEBAR_ORDERS.cable);
+      if (cat === 'os') {
+        const t = orderedRank(label, SIDEBAR_ORDERS.osTop);
+        const l = orderedRank(label, SIDEBAR_ORDERS.osLeaf);
+        if (t !== Number.MAX_SAFE_INTEGER) return t * 100 + (l === Number.MAX_SAFE_INTEGER ? 0 : l);
+        return l;
+      }
       if (cat === 'package') {
         const t = orderedRank(label, SIDEBAR_ORDERS.packageType);
         if (t !== Number.MAX_SAFE_INTEGER) return t;

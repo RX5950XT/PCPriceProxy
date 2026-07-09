@@ -22,11 +22,19 @@ const GPU_SERIES_ORDER: readonly string[] = [
 ];
 
 const HDD_TYPE_ORDER: readonly string[] = ['桌上型硬碟', 'NAS 專用碟', '監控碟', '企業級硬碟', '行動外接硬碟'];
-const NETWORK_ORDER: readonly string[] = ['無線路由器', '網路卡 / 接收器', '交換器', 'NAS 網路儲存', '網路攝影機', '網路線材', '其他網通設備'];
+const NETWORK_ORDER: readonly string[] = ['無線路由器', '網路卡 / 接收器', '交換器', 'NAS 網路儲存', '網路攝影機', '其他網通設備'];
 const FAN_ORDER: readonly string[] = ['12cm 風扇', '14cm 風扇', '8/9cm 小風扇', '其他尺寸風扇'];
+const CABLE_ORDER: readonly string[] = [
+  '網路線', '影音線', 'USB / 傳輸線', '轉接頭 / 轉接線', '電源延長線 / 插座', '機內排線 / 延長線', '切換器 / 分配器', '其他線材',
+];
+// 作業系統 / 軟體：兩層（作業系統 > Windows 11…、應用軟體 > 防毒軟體…）
+const OS_TOP_ORDER: readonly string[] = ['作業系統', '應用軟體'];
+const OS_LEAF_ORDER: readonly string[] = [
+  'Windows 11', 'Windows 10', 'Windows Server', '其他作業系統', '防毒軟體', '辦公軟體', '其他軟體',
+];
 // 整機/組合：完整系統在前，零件搭售次之，條件價單品（非零件淨價）殿後
 const PACKAGE_ORDER: readonly string[] = [
-  '整機電腦', '筆電', '準系統 / 迷你 PC', '掌機', '零件組合', '搭購價單品',
+  '整機電腦', '伺服器 / 工作站', '筆電', '準系統 / 迷你 PC', '掌機', '零件組合', '搭購價單品',
 ];
 const COMBO_ORDER: readonly string[] = [
   '機殼 + 電源', '散熱器 + 電源', '散熱器 + 機殼', 'CPU + 主機板', '主機板 + 記憶體/儲存',
@@ -46,6 +54,9 @@ export const SIDEBAR_ORDERS = {
   hddType: HDD_TYPE_ORDER,
   network: NETWORK_ORDER,
   fan: FAN_ORDER,
+  cable: CABLE_ORDER,
+  osTop: OS_TOP_ORDER,
+  osLeaf: OS_LEAF_ORDER,
   packageType: PACKAGE_ORDER,
   combo: COMBO_ORDER,
   packageBase: PACKAGE_BASE_ORDER,
@@ -124,6 +135,8 @@ function semanticRank(category: string, value: string): number {
   if (category === ProductCategory.HDD) return orderedRank(value, HDD_TYPE_ORDER);
   if (category === ProductCategory.NETWORK) return orderedRank(value, NETWORK_ORDER);
   if (category === ProductCategory.FAN) return orderedRank(value, FAN_ORDER);
+  if (category === ProductCategory.CABLE) return orderedRank(value, CABLE_ORDER);
+  if (category === ProductCategory.OS) return twoLevelRank(value, OS_TOP_ORDER, OS_LEAF_ORDER);
   if (category === ProductCategory.PACKAGE) return packageRank(value);
 
   const ddrRank = orderedRank(value, DDR_ORDER);
@@ -168,6 +181,19 @@ function packageRank(value: string): number {
   if (combo !== Number.MAX_SAFE_INTEGER) return combo * 100;
   if (base !== Number.MAX_SAFE_INTEGER) return base;
   return Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * 兩層樹排序。同時支援樹的「裸節點名」與 flat API 的完整 `A > B` 字串：
+ * 命中頂層時以 `top*100 + leaf` 加權，只命中葉層時落回葉層序。
+ */
+function twoLevelRank(value: string, topOrder: readonly string[], leafOrder: readonly string[]): number {
+  const top = orderedRank(value, topOrder);
+  const leaf = orderedRank(value, leafOrder);
+  if (top !== Number.MAX_SAFE_INTEGER) {
+    return top * 100 + (leaf === Number.MAX_SAFE_INTEGER ? 0 : leaf);
+  }
+  return leaf;
 }
 
 function vendorRank(value: string): number {

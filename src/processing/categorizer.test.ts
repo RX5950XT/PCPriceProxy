@@ -109,7 +109,8 @@ describe('categorizeProduct 分類順序', () => {
     const optical = '華碩 SDRW-08D2S 黑 外接式超薄燒錄機 (8XDVD/支援 M-DISC/支援Mac OS)<font color="#ff0000">【熱賣】</font>';
 
     expect(categorizeProduct(makeProduct(monitor, ProductCategory.SPEAKER)).category).toBe(ProductCategory.MONITOR);
-    expect(categorizeProduct(makeProduct(optical, ProductCategory.OS)).category).toBe(ProductCategory.OPTICAL_DRIVE);
+    // 光碟機不再是獨立分類：燒錄機落 OTHER 由 diy-filter 移除，但不可被誤收進 OS
+    expect(categorizeProduct(makeProduct(optical, ProductCategory.OS)).category).toBe(ProductCategory.OTHER);
   });
 
   it('一般喇叭的 Hz 頻率規格不可被誤當螢幕污染', () => {
@@ -436,5 +437,93 @@ describe('第十五輪：除污與品牌分類', () => {
     expect(coolerCase.subcategory).toBe('零件組合 > 散熱器 + 機殼');
     const mbRam = categorizeProduct(makeProduct('【重磅價】華碩 PRIME B760M-F D4-CSM+威剛 ADATA DDR4-3200 16G+十銓 TEAM MP33 512GB', ProductCategory.PACKAGE));
     expect(mbRam.subcategory).toBe('零件組合 > 主機板 + 記憶體/儲存');
+  });
+});
+
+describe('第十七輪：線材獨立分類、OS/軟體合併、光碟機移除', () => {
+  const cat = (raw: string, source = ProductCategory.OTHER) => categorizeProduct(makeProduct(raw, source));
+
+  it('伺服器 / 商用工作站不可被品名裡的 DVD-RW 拖進光碟機', () => {
+    const server = 'ASUS RS300-E12-RS4 華碩伺服器/Intel E-2436/32G D5 ECC/DVD-RW/450W/IKVM遠端管理模組/三年隔日到府保固';
+    const workstation = 'HP Z6 G5 惠普商用工作站/W5-3423/16G D5/512G SSD/1125W/DVD-RW/Win11 Pro WK/3年到府維修保固';
+
+    expect(bundleReason(server)).toBe('server-workstation');
+    expect(cat(server).subcategory).toBe('伺服器 / 工作站 > ASUS');
+    expect(cat(workstation).subcategory).toBe('伺服器 / 工作站 > HP');
+  });
+
+  it('「行動工作站」帶螢幕吋數，是筆電不是工作站', () => {
+    const zbook = 'HP ZBOOK 8 G1i 惠普商用行動工作站/Ultra7-255U/16G D5/512G SSD/14吋 WUXGA/Win11 Pro/3年到府';
+
+    expect(cat(zbook).subcategory).toBe('筆電 > HP');
+  });
+
+  it('「工作站主機板」不可被誤判成整機', () => {
+    const mb = '華碩 PRO WS W790-ACE 工作站主機板 /LGA4677/E-ATX/M.2/DDR5';
+
+    expect(bundleReason(mb)).toBeNull();
+    expect(cat(mb, ProductCategory.MOTHERBOARD).category).toBe(ProductCategory.MOTHERBOARD);
+  });
+
+  it('外接燒錄機落 OTHER（光碟機不再是獨立分類）', () => {
+    expect(cat('華碩【BW-16D1H-U PRO】16X藍光燒錄器 / USB5G / 黑 / 附支架 / 支援Mac').category).toBe(ProductCategory.OTHER);
+    expect(cat('ASUS 華碩 SDRW-08D2S-U 外接式燒錄機《黑》').category).toBe(ProductCategory.OTHER);
+  });
+
+  it('Windows 隨機版《含DVD》是作業系統，不是光碟機', () => {
+    const win = cat('Microsoft 微軟 Windows 11 家用中文 64位元隨機版《含DVD》');
+
+    expect(win.category).toBe(ProductCategory.OS);
+    expect(win.subcategory).toBe('作業系統 > Windows 11');
+  });
+
+  it('作業系統與應用軟體合併為同一分類，靠第一層區隔', () => {
+    expect(cat('Microsoft Office 2024 家用版 中文盒裝').subcategory).toBe('應用軟體 > 辦公軟體');
+    expect(cat('PC-cillin 2025 雲端版 12個月1台防護版', ProductCategory.OS).subcategory).toBe('應用軟體 > 防毒軟體');
+  });
+
+  it('線材依類型分層；沒有「線」字的接頭配對也要撈到', () => {
+    expect(cat('廣鐸 CAT.6網路線-3米').subcategory).toBe('網路線');
+    expect(cat('LINDY 林帝【47592】CAT.6A 1米 支援到1Gbps U/FTP純銅鍍金接點 / 極細線 / 灰').subcategory).toBe('網路線');
+    expect(cat('3C Pig【HDMI-100】HDMI 2.0 公-公 / 鍍金頭 / 全銅 / 抗干擾磁環 / 1米').subcategory).toBe('影音線');
+    expect(cat('Gigastone【CC-7800B】Type-C to C USB10G / 100W充電傳輸線 / 黑 / 1.5M').subcategory).toBe('USB / 傳輸線');
+    expect(cat('保護傘 安全插座延長線/6切6座獨立開關/過載自動斷電保護/耐燃材質/1.8米').subcategory).toBe('電源延長線 / 插座');
+    expect(cat('SATA 硬碟排線 ( 黑 )', ProductCategory.HDD).subcategory).toBe('機內排線 / 延長線');
+    expect(cat('酷碼 PCI-E 5.0 X16 延長線(黑) 200mm/90度/抗電磁干擾').subcategory).toBe('機內排線 / 延長線');
+    expect(cat('LIAN LI 聯力 STRIMER WIRELESS 24PIN 無線 ARGB延長線 (需搭無線控制器)').subcategory).toBe('機內排線 / 延長線');
+  });
+
+  it('內建 KVM 的電競螢幕不可被線材分類吸走', () => {
+    const monitor = '【27型】BenQ MOBIUZ EX271Q電競螢幕 (DP/HDMI/KVM/Type-C(65W)/Type-A/IPS/2K/1ms/180Hz)';
+
+    expect(cat(monitor, ProductCategory.MONITOR).category).toBe(ProductCategory.MONITOR);
+  });
+
+  it('顯卡立架與風扇集線器只是「附一條線」，不是線材本體', () => {
+    expect(cat('聯力 VG4-4-V2X 黑 顯卡立架+PCI-E 4.0延長線/200mm').category).not.toBe(ProductCategory.CABLE);
+    expect(cat('華碩 TUF Gaming ARGB PWM 風扇集線器 1分6/磁吸式/雙SATA供電').category).not.toBe(ProductCategory.CABLE);
+  });
+
+  it('電源規格的「黑色線材」不可把整顆電源踢出 PSU', () => {
+    const antec = cat('Antec 安鈦克 NE850GM 白 (80+金牌/黑色線材/ATX/全模組/全日系/十年保固)', ProductCategory.PSU);
+    const msi = cat('微星 MAG A1200PLS PCIE5 (80+白金/ATX3.1/PCIe 5.1/雙原生12V-2x6連接埠，12V-2x6 雙色線材/全模組)');
+
+    expect(antec.category).toBe(ProductCategory.PSU);
+    expect(antec.subcategory).toBe('ATX 電源 > 750W~1000W > 80+ 金牌 > 全模組');
+    expect(msi.category).toBe(ProductCategory.PSU);
+  });
+
+  it('硬體的隨附軟體字樣不可被歸進「作業系統 / 軟體」', () => {
+    expect(cat('羅技 C922 Pro Stream /動態1080P 30FPS/軟體最高1500萬畫素/附腳架/自動對焦').category).not.toBe(ProductCategory.OS);
+    expect(cat('Toshiba 2TB(綠) Canvio Advance V10 (Type-A / 3年保)*加密.備份軟體').category).not.toBe(ProductCategory.OS);
+    expect(cat('PCM 科風 WAR-1000AP 在線互動式不斷電系統 (1000VA/支援監控軟體/AVR自動穩壓)').category).not.toBe(ProductCategory.OS);
+    // 「監控惡意軟體」是防毒軟體的功能描述，不可被誤擋
+    expect(cat('卡巴斯基 標準版/隱私防護/監控惡意軟體 1台1年/無附光碟').category).toBe(ProductCategory.OS);
+  });
+
+  it('已移除的舊分類（optical_drive / software）會被強制重判而非直接刪除', () => {
+    const legacy = makeProduct('Microsoft Office 2024 家用版 中文盒裝', 'software' as ProductCategory);
+
+    expect(categorizeProduct(legacy).category).toBe(ProductCategory.OS);
   });
 });

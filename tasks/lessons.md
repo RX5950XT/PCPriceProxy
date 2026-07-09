@@ -220,6 +220,22 @@
 - **規則**：`systemBrand()` 剝除 `【…】(…)` 後取前 32 字，逐一對前 4 個 token 做 `extractBrand`，取最早命中者；中文品牌與型號黏接（`酷碼SNEAKER X`）再用前 12 字補掃一次。通路自組整機（酷!PC / 欣亞PC / 捷元 / DeskMini）品名根本沒有零件品牌，另立 `PACKAGE_VENDORS` 表。
 - **附帶**：`HP`/`LG` 這類 ≤3 字品牌靠 `brandMatches` 的詞邊界比對，不會誤中 `HyperX`；子品牌（ZOWIE→BenQ、ROG→ASUS）不可入 `KNOWN_BRANDS`，中文別名「狼蛛」也不可指向 AULA（Razer Ornata 中文名是「雨林狼蛛」）。
 
+## 48. 下架商品不會自己消失——爬蟲必須汰除孤兒列
+- **問題**：`os` 分類裡混著 Toshiba 外接硬碟、電競椅、USB HUB，`scraped_at` 停在數輪前。它們早就從來源下架，卻因為分類值仍屬 `DIY_CATEGORIES` 而永遠不被 `deleteNonDiyProducts` 清掉（那支只看分類，不看新鮮度）。一次汰除清出 **2,897 筆**。
+- **規則**：upsert 完立刻 `DELETE FROM products WHERE source = ? AND scraped_at < ?`（該輪的 `result.scrapedAt`；同一輪所有商品共用同一個時間戳）。**空結果不清**，避免爬取異常把整個來源清空。`price_history` 靠 `ON DELETE CASCADE` 一起清。
+- **配套**：三處爬取流程（scheduler、`POST /sources/refresh`、`POST /sources/:name/refresh`）本來各自複製 normalize→categorize→filter→upsert，抽成 `src/ingest.ts` 的 `ingestScrapeResult`，汰除邏輯只有一份。
+- **教訓**：改分類規則時只想「新資料會怎麼分」，忘了「舊資料還躺在那裡」。使用者說「裡面應該還有其他雜七雜八的東西」時，先查 `scraped_at`。
+
+## 49. 短關鍵字與規格描述詞會整批綁架分類
+- **問題**：`OS` 是 CATEGORY_KEYWORDS[OS] 的關鍵字 → `TOSHIBA`、`TosLink`、`支援 Mac OS`、`NON-OS` 全被歸進作業系統。`KVM` 加進線材關鍵字 → 9 台內建 KVM 的電競螢幕被吸走。`軟體` → `軟體最高1500萬畫素` 的視訊鏡頭、`附加密備份軟體` 的外接硬碟。
+- **規則**：加關鍵字前先問「哪些不相干的品名含這個子字串」。≤3 字的英文關鍵字一律不加（改列具體型號，如 CPU 已把 `Core i` 換成 `Core i3/5/7/9`）；只出現在規格描述裡的詞（KVM、軟體、線材）只能用於**子分類判定**，不能當主分類關鍵字，或必須配污染過濾器。
+- **附帶**：`isOsContaminated` 不可用 `DVD` 當排除詞——Windows 隨機版標示「《含DVD》」。audit 的 `Optical drive residue` 不可用「光碟機」——機殼有「光碟機版 / 無光碟機版」（5.25 吋槽）。
+
+## 50. 新增分類會照出既有排除詞的錯
+- **問題**：`isPsuContaminated` 把「線材」列為排除詞。過去沒事——電源本體規格寫「黑色線材」被踢出 PSU 後落 OTHER 被刪，沒人發現。線材分類一開，`Antec NE850GM (80+金牌/黑色線材/全模組)` 直接跑進線材。
+- **規則**：新增主分類時，掃一遍所有 `isXxxContaminated` 的排除詞，找出「跟新分類同名」的詞——那些詞很可能本來就過寬。反向也要加護欄：`isCableContaminated` 用「認證＋模組化」簽章擋電源本體、用 `【27型】/電競螢幕` 擋螢幕。
+- **驗證**：離線快照做雙向檢查時要小心——sinya/autobuy 的 scraper 自己會呼叫 `detectCategory`，快照裡的 `srcCat` 是**舊程式**算出來的，會產生假回歸。必須重爬，或直接對 `detectCategory` 單測。
+
 ## 44. 改成品牌分類前，先量測品牌覆蓋率並補齊別名，且留類型退路
 - **問題**：機殼/鍵盤/喇叭要改「品牌 > …」，但品牌抽取原本缺很多（機殼缺 29%、鍵盤 51%、喇叭 78%）——直接切換會讓半數商品落進「無品牌」黑洞。且中文品牌別名缺失（銀欣/曜越/漫步者/合勤…）是主因。
 - **規則**：切品牌分類前先 `SUM(brand IS NULL)` 量測，抽樣缺品牌樣本補 `KNOWN_BRANDS`＋`BRAND_ALIASES`（中文名一律加別名）。周邊用 `withBrand(type)`：抓不到品牌**退回只有類型層**，不讓商品從側欄消失。機殼系列表 `CASE_SERIES` 以**品牌為範圍**（避免跨廠系列名碰撞），未知系列只到品牌層。補完別名機殼無品牌 319→89、喇叭 78%→2%。

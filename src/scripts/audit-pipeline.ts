@@ -242,6 +242,36 @@ const cpuDuplicateCards = db.prepare(`
 `).get() as { cnt: number };
 console.log(`CPU duplicate model cards: ${cpuDuplicateCards.cnt} (target: 0)`);
 
+console.log('\n--- Removed categories & cable purity ---');
+// 已移除的分類不可殘留（categorizeProduct 對非 DIY 分類會強制重判）
+const legacyCategories = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products WHERE category IN ('optical_drive', 'software')
+`).get() as { cnt: number };
+console.log(`Legacy category rows (optical_drive/software): ${legacyCategories.cnt} (target: 0)`);
+
+// 燒錄機是周邊，不入庫；伺服器整機不可因 DVD-RW 落入零件分類。
+// 不可用「光碟機」當關鍵字：機殼有「光碟機版 / 無光碟機版」（5.25 吋槽）規格字樣。
+const opticalResidue = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category != 'package' AND (raw_name LIKE '%燒錄機%' OR raw_name LIKE '%燒錄器%')
+`).get() as { cnt: number };
+console.log(`Optical drive residue: ${opticalResidue.cnt} (target: 0)`);
+
+// 螢幕/機殼/風扇「附一條線」不是線材本體
+const cablePollution = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category = 'cable'
+    AND (raw_name LIKE '%電競螢幕%' OR raw_name LIKE '%液晶螢幕%' OR raw_name LIKE '%集線器%'
+      OR raw_name LIKE '%立架%' OR raw_name LIKE '%外接盒%' OR raw_name LIKE '%讀卡機%')
+`).get() as { cnt: number };
+console.log(`Non-cable in cable (monitor/hub/bracket): ${cablePollution.cnt} (target: 0)`);
+
+// 線材全數要有類型層，否則側欄變平列
+const cableNoSubcat = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products WHERE category = 'cable' AND (subcategory IS NULL OR subcategory = '')
+`).get() as { cnt: number };
+console.log(`CABLE without subcategory: ${cableNoSubcat.cnt} (target: 0)`);
+
 console.log('\n--- Cross-store price anomalies (>1.8x) ---');
 const priceAnomaly = db.prepare(`
   SELECT COUNT(*) as cnt FROM match_groups
@@ -292,6 +322,10 @@ const checks = [
   { name: 'PACKAGE without subcategory = 0', pass: packageNoSubcat === 0 },
   { name: 'Price-condition leak in part categories = 0', pass: conditionLeak.cnt === 0 },
   { name: 'CPU duplicate model cards = 0', pass: cpuDuplicateCards.cnt === 0 },
+  { name: 'Legacy category rows = 0', pass: legacyCategories.cnt === 0 },
+  { name: 'Optical drive residue = 0', pass: opticalResidue.cnt === 0 },
+  { name: 'Non-cable in cable = 0', pass: cablePollution.cnt === 0 },
+  { name: 'CABLE without subcategory = 0', pass: cableNoSubcat.cnt === 0 },
   { name: 'Price anomalies = 0', pass: priceAnomaly.cnt === 0 },
 ];
 for (const c of checks) {

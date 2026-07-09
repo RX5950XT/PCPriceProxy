@@ -2,11 +2,7 @@ import cron from 'node-cron';
 import { getAllScrapers } from './scrapers/registry.js';
 import { ProductRepository } from './storage/product-repository.js';
 import { MemoryCache } from './storage/cache.js';
-import { normalizeProduct } from './processing/normalizer.js';
-import { categorizeProduct } from './processing/categorizer.js';
-import { MIN_VALID_PRICE } from './shared/constants.js';
-import { isDiyProduct } from './processing/diy-filter.js';
-import type { Product } from './shared/types.js';
+import { ingestScrapeResult } from './ingest.js';
 
 export class Scheduler {
   private task: cron.ScheduledTask | null = null;
@@ -52,17 +48,12 @@ export class Scheduler {
         console.log(`[Scheduler] Scraping ${scraper.source}...`);
         const result = await scraper.scrape();
 
-        const processed: Product[] = result.products
-          .map(normalizeProduct)
-          .map(categorizeProduct)
-          .filter(p => p.price >= MIN_VALID_PRICE)
-          .filter(p => isDiyProduct(p));
-
         const repo = new ProductRepository();
-        repo.upsertMany(processed);
-        repo.logScrape(scraper.source, 'success', processed.length, result.durationMs);
+        const { stored, stale } = ingestScrapeResult(repo, result);
+        repo.logScrape(scraper.source, 'success', stored, result.durationMs);
 
-        console.log(`[Scheduler] ${scraper.source}: ${processed.length} products, ${result.durationMs}ms`);
+        if (stale > 0) console.log(`[Scheduler] ${scraper.source}: removed ${stale} stale products.`);
+        console.log(`[Scheduler] ${scraper.source}: ${stored} products, ${result.durationMs}ms`);
 
         if (result.errors.length > 0) {
           console.warn(`[Scheduler] ${scraper.source}: ${result.errors.length} parse errors`);

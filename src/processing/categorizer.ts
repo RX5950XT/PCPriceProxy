@@ -1,6 +1,6 @@
 import { ProductCategory } from '../shared/types.js';
 import type { Product } from '../shared/types.js';
-import { CATEGORY_META } from '../shared/constants.js';
+import { CATEGORY_META, isDiyCategory } from '../shared/constants.js';
 import { extractBrand } from './normalizer.js';
 
 /**
@@ -24,10 +24,14 @@ const CATEGORY_KEYWORDS: Record<ProductCategory, readonly string[]> = {
   [ProductCategory.HEADSET]: ['耳機', '耳麥', 'Headset', 'Headphone'],
   [ProductCategory.SPEAKER]: ['喇叭', 'Speaker'],
   [ProductCategory.FAN]: ['風扇', 'Fan', 'PWM'],
-  [ProductCategory.OPTICAL_DRIVE]: ['光碟機', '燒錄機', 'Optical', 'DVD', 'Blu-ray'],
+  // 不可列入 'KVM'：內建 KVM 的電競螢幕會被整批吸走（子分類判定才用 KVM）
+  [ProductCategory.CABLE]: [
+    '線材', '傳輸線', '轉接線', '延長線', '充電線', '網路線', '排線', '電源線', '音源線', '光纖線', '編織線',
+    '轉接頭', '轉接器', '切換器', '分配器', 'Cable',
+  ],
   [ProductCategory.NETWORK]: ['網路', '無線', 'Router', 'Wi-Fi', 'NAS'],
-  [ProductCategory.OS]: ['作業系統', 'Windows', 'OS'],
-  [ProductCategory.SOFTWARE]: ['軟體', 'Software', '防毒'],
+  // 不可列入裸 'OS'：會被「支援 Mac OS / NON-OS」子字串誤中
+  [ProductCategory.OS]: ['作業系統', 'Windows', '軟體', 'Software', '防毒', 'Office', 'Microsoft 365'],
   [ProductCategory.PACKAGE]: [
     // 僅保留「真正多件組合」字樣作為 isRealBundle 的補漏；單品條件價（套裝搭購/搭板/組裝）由 detectPriceCondition 處理
     // 移除過寬的 '套裝/高興價/戰鬥版電競筆電'（真品由 isLaptop / isRealBundle 判定，避免誤把單一週邊歸組合）
@@ -152,9 +156,10 @@ export function isCoolerContaminated(name: string): boolean {
 
 export function isPsuContaminated(name: string): boolean {
   const upper = name.toUpperCase();
-  // 電源「線材 / 配件 / 測試器」排除，避免被 "電源" 關鍵字誤收
+  // 電源「線材 / 配件 / 測試器」排除，避免被 "電源" 關鍵字誤收。
+  // 不可列入裸「線材」：電源本體規格會寫「黑色線材 / 雙色線材」，會把整顆電源踢出 PSU。
   const excludes = [
-    '延長線', '分接', '電源線', '排插', '測試器', '轉接', '不斷電', 'UPS', '保護蓋', '線材',
+    '延長線', '分接', '電源線', '排插', '測試器', '轉接', '不斷電', 'UPS', '保護蓋',
     '行動電源', '快充', '充電', '磁吸', 'MAH', 'GAN', '音響', '喇叭', '藍牙', '藍芽',
     // 「電源」誤收的配件：電源擴充線、免電源轉換線、硬碟外接盒（獨立電源開關/抽換/多 Bay）
     '擴充線', '轉換', '外接盒', '抽換', '硬碟外接', '獨立電源開關', 'BAY'
@@ -167,8 +172,37 @@ export function isSpeakerContaminated(name: string): boolean {
   return /螢幕|顯示器|MONITOR|電競螢幕|\bFHD\b|\bQHD\b|\bUHD\b|4K|2K|1080P|1440P/i.test(name);
 }
 
+/**
+ * 燒錄機的「支援 Windows、macOS」會誤中 OS 關鍵字。
+ * 不可用 `DVD` / `M-DISC` 當排除詞：Windows 隨機版標示「《含DVD》」，會被一起排掉。
+ * 另擋「附加密備份軟體」的外接硬碟、「支援監控軟體」的 UPS、「軟體最高1500萬畫素」的視訊鏡頭。
+ */
 export function isOsContaminated(name: string): boolean {
-  return /燒錄機|光碟機|DVD|BLU-?RAY|M-?DISC|外接式超薄/i.test(name);
+  return /燒錄機|燒錄器|光碟機|BLU-?RAY|藍光/i.test(name) ||
+    /鏡頭|WEBCAM|不斷電|\bUPS\b|硬碟|\bSSD\b|畫素|對焦|備份軟體|監控軟體/i.test(name);
+}
+
+/**
+ * 顯卡立架 / 集線器 / 外接盒等「附一條線」的配件不是線材本體。
+ * 螢幕規格常列 KVM、Type-C、切換等字樣，需以品名格式（【27型】/ 電競螢幕）擋下；
+ * 電源供應器規格會寫「黑色線材 / 雙色線材」，需以認證＋模組化簽章擋下。
+ */
+export function isCableContaminated(name: string): boolean {
+  return /立架|豎立|直立套件|支撐架|顯卡套件|集線器|\bHUB\b|外接盒|硬碟座|讀卡機|機殼|主機板/i.test(name) ||
+    /【\d{2}型】|電競螢幕|液晶螢幕/.test(name) ||
+    (/80\s?\+|金牌|白金|銅牌|鈦金/.test(name) && /全模組|半模組|ATX\s?3/i.test(name));
+}
+
+/**
+ * 隱式線材偵測：品名可能完全沒有「線」字（`HDMI 2.0 公-公 / 1米`、`CAT.6A 1米`）。
+ * 簽章＝接頭配對 / `A to B` 轉接 / 網路線規 ＋ 線長，缺一不可，避免誤收帶接頭規格的零件。
+ */
+function looksLikeCable(name: string): boolean {
+  if (isCableContaminated(name)) return false;
+  if (!/\d+(?:\.\d+)?\s*(?:米|M\b|CM\b|公分)/i.test(name)) return false;
+  return /公\s*-\s*[公母]|母\s*-\s*[公母]/.test(name) ||
+    /\b(?:HDMI|DP|DVI|VGA|USB|Type-?[AC]|SATA|IDE|RJ-?45|D-?SUB)\b[^,+＋]{0,14}\bto\b/i.test(name) ||
+    /\bCAT\.?\s?[5-8][A-Z]?\b/i.test(name);
 }
 
 export function isCaseContaminated(name: string): boolean {
@@ -194,7 +228,7 @@ export function isFanContaminated(name: string): boolean {
 
 /** NETWORK 來源常混入印表機、無線充電座、無線耳麥、無線鍵鼠組、掌機、HDMI 線等「無線/Wi-Fi」誤中品。 */
 export function isNetworkContaminated(name: string): boolean {
-  return /印表機|複合機|事務機|連續供墨|充電座|充電盤|充電器|行動電源|耳機|耳麥|鍵鼠|鍵盤|滑鼠|遊戲鼠|掌機|ALLY|CLAW\s*A\d|HDMI|傳輸線|喇叭|聲霸|SOUNDBAR|擴音機|工作站/i.test(name);
+  return /印表機|複合機|事務機|連續供墨|充電座|充電盤|充電器|行動電源|耳機|耳麥|鍵鼠|鍵盤|滑鼠|遊戲鼠|掌機|ALLY|CLAW\s*A\d|HDMI|傳輸線|喇叭|聲霸|SOUNDBAR|擴音機|工作站|網路線|\bCAT\.?\s?[5-8]/i.test(name);
 }
 
 /**
@@ -233,6 +267,20 @@ function isLaptop(name: string): boolean {
 }
 
 /** 預建成品機 / 迷你 PC（含作業系統或 NON-OS）：CPU 型號 + Windows + 儲存。 */
+/**
+ * 伺服器 / 商用工作站整機。Xeon 料號（W5-3423、E-2436）不在 `RE_CPU_MODEL` 內，
+ * 改以「整機字樣 + 斜線規格清單 + 記憶體 + (儲存或瓦數)」判定，否則會被品名裡的 `DVD-RW` 拖進光碟機。
+ */
+function isServerWorkstation(name: string): boolean {
+  if (!/伺服器|工作站|\bSERVER\b/i.test(name)) return false;
+  // 「行動工作站」（HP ZBOOK）帶螢幕吋數，是筆電不是機架/直立工作站
+  if (isLaptopLike(name)) return false;
+  if (/主機板|機殼|電源供應器|記憶體|散熱器|網路卡|顯示卡|繪圖卡|鍵盤|滑鼠|螢幕/.test(name)) return false;
+  return /\/.*\//.test(name) &&
+    /\b\d{2,3}\s*G\b|DDR[45]|\bD[45]\b/i.test(name) &&
+    (RE_STORAGE.test(name) || /\d{3,4}\s?W\b/i.test(name));
+}
+
 function isPrebuiltSystem(name: string): boolean {
   const hasOs = /WIN(DOWS)?\s*1[01]|\bW1[01]\b|NON-?OS/i.test(name);
   return RE_CPU_MODEL.test(name) && hasOs && RE_STORAGE.test(name);
@@ -276,6 +324,7 @@ export function bundleReason(name: string): string | null {
   if (isNasAppliance(name)) return null;
 
   // 1. 完整成品系統 / 筆電 / 準系統 / 迷你 PC / 掌機
+  if (isServerWorkstation(name)) return 'server-workstation';
   if (isLaptop(name)) return 'laptop';
   if (/掌機|ROG\s*(?:XBOX\s*)?ALLY|CLAW\s*A\d|STEAM\s*DECK|LEGION\s*GO/i.test(name) && RE_STORAGE.test(name)) return 'handheld';
   const barebone = barebonePcReason(name);
@@ -466,6 +515,11 @@ export function detectCategory(name: string): ProductCategory {
     return ProductCategory.MONITOR;
   }
 
+  // 隱式線材偵測：放在所有零件隱式偵測之後，只撿沒有「線」字的漏網線材
+  if (looksLikeCable(name)) {
+    return ProductCategory.CABLE;
+  }
+
   const priorityOrder: ProductCategory[] = [
     ProductCategory.PACKAGE,
     ProductCategory.KEYBOARD,
@@ -481,10 +535,10 @@ export function detectCategory(name: string): ProductCategory {
     ProductCategory.HDD,
     ProductCategory.PSU,
     ProductCategory.FAN,
+    // CABLE 早於 NETWORK：網路線是線材，不是網通設備
+    ProductCategory.CABLE,
     ProductCategory.NETWORK,
     ProductCategory.OS,
-    ProductCategory.SOFTWARE,
-    ProductCategory.OPTICAL_DRIVE,
     // MONITOR 排在較後面：避免「LCD 水冷頭 / OLED 顯示螢幕電源 / 可觸控鍵盤」等含螢幕字樣的非螢幕商品被誤收
     ProductCategory.MONITOR,
     ProductCategory.CPU, // CPU is evaluated last because "CPU" keyword is often present in other components
@@ -507,6 +561,7 @@ export function detectCategory(name: string): ProductCategory {
         if (category === ProductCategory.CASE && isCaseContaminated(name)) continue;
         if (category === ProductCategory.SPEAKER && isSpeakerContaminated(name)) continue;
         if (category === ProductCategory.OS && isOsContaminated(name)) continue;
+        if (category === ProductCategory.CABLE && isCableContaminated(name)) continue;
         if (category === ProductCategory.MONITOR && isMonitorContaminated(name)) continue;
         if (category === ProductCategory.FAN && isFanContaminated(name)) continue;
         if (category === ProductCategory.NETWORK && isNetworkContaminated(name)) continue;
@@ -1151,6 +1206,7 @@ function detectPackageSubcategory(name: string, baseCategory?: ProductCategory):
   if (baseCategory) {
     return hierarchy('搭購價單品', CATEGORY_META[baseCategory].label, detectPriceCondition(name));
   }
+  if (isServerWorkstation(name)) return hierarchy('伺服器 / 工作站', systemBrand(name));
   if (/掌機|ROG\s*(?:XBOX\s*)?ALLY|CLAW\s*A\d|STEAM\s*DECK|LEGION\s*GO/i.test(name)) return hierarchy('掌機', systemBrand(name));
   if (isLaptopLike(name) && RE_STORAGE.test(name)) return hierarchy('筆電', systemBrand(name));
   if (/準系統|迷你主機|迷你電腦|MINI\s*PC(?!IE)|\bNUC\b|\bCUBI\b|\bBRIX\b|DeskMini|DeskMeet|PRO\s*DP21|CPU\.RAM\.DISK選購/i.test(name)) {
@@ -1265,22 +1321,39 @@ export function detectSubcategory(category: ProductCategory, name: string, baseC
     else if (/PCE-|PCI-?E|網路卡|網卡|LAN\s*CARD|藍牙接收|藍芽接收|USB.{0,8}(藍牙|藍芽|WI-?FI)/i.test(name)) type = '網路卡 / 接收器';
     else if (/交換器|SWITCH|\bHUB\b/i.test(name)) type = '交換器';
     else if (/NAS|SYNOLOGY|群暉|QNAP|威聯通|華芸|ASUSTOR|DISKSTATION/i.test(name)) type = 'NAS 網路儲存';
-    else if (/網路線|CAT\.?\s*[5-8]/i.test(name)) type = '網路線材';
     return withBrand(type);
   }
 
-  if (category === ProductCategory.OS) {
-    if (upperName.includes('WIN 11') || upperName.includes('WINDOWS 11') || upperName.includes('WIN11')) return 'Windows 11';
-    if (upperName.includes('WIN 10') || upperName.includes('WINDOWS 10') || upperName.includes('WIN10')) return 'Windows 10';
-    return '其他作業系統';
-  }
+  if (category === ProductCategory.CABLE) return detectCableSubcategory(upperName);
 
-  if (category === ProductCategory.SOFTWARE) {
-    if (upperName.includes('防毒') || upperName.includes('防護') || upperName.includes('OFFICE') || upperName.includes('MICROSOFT 365')) return '防毒與辦公軟體';
-    return '應用軟體';
+  // 作業系統與應用軟體同一分類，靠第一層區隔
+  if (category === ProductCategory.OS) {
+    if (/WIN\s?11|WINDOWS\s?11/.test(upperName)) return '作業系統 > Windows 11';
+    if (/WIN\s?10|WINDOWS\s?10/.test(upperName)) return '作業系統 > Windows 10';
+    if (/WINDOWS\s*SERVER|SERVER\s*20\d\d/.test(upperName)) return '作業系統 > Windows Server';
+    if (/作業系統|WINDOWS|LINUX|CHROME\s*OS/.test(upperName)) return '作業系統 > 其他作業系統';
+    if (/防毒|防護|資安|ANTIVIRUS|NORTON|MCAFEE|KASPERSKY|卡巴斯基|諾頓|趨勢|PC-?CILLIN/.test(upperName)) return '應用軟體 > 防毒軟體';
+    if (/OFFICE|MICROSOFT 365|文書/.test(upperName)) return '應用軟體 > 辦公軟體';
+    return '應用軟體 > 其他軟體';
   }
 
   return null;
+}
+
+/** 線材類型（單層）。順序即判定優先序：切換器 → 網路 → 機內 → AC 電源 → 轉接 → 影音 → 傳輸。 */
+function detectCableSubcategory(upperName: string): string {
+  if (/切換器|分配器|KVM|[一二三四]進[一二三四]出/.test(upperName)) return '切換器 / 分配器';
+  if (/網路線|\bCAT\.?\s?[5-8]/.test(upperName)) return '網路線';
+  // 機內：SATA 排線、PCI-E 顯卡延長線、ARGB / 24Pin / 12VHPWR 電源延長線
+  // 料號黏字（SFF8643 / 4SAS）使 \b 失效，故不加詞邊界
+  if (/排線|SFF\d*|SAS|\bIDE\b/.test(upperName)) return '機內排線 / 延長線';
+  if (/(PCI-?E|\d+\s?-?\s?PIN|12VHPWR|ARGB|EPS12V).{0,20}延長線/.test(upperName)) return '機內排線 / 延長線';
+  if (/插座|排插|防雷|過載|延長座|\d+插|電源.{0,4}延長線|延長.{0,3}電源線/.test(upperName)) return '電源延長線 / 插座';
+  if (/轉接頭|轉接器|轉接線/.test(upperName)) return '轉接頭 / 轉接線';
+  if (/HDMI|DISPLAY\s*PORT|\bDP\b|\bDVI|\bVGA\b|D-?SUB|音源|光纖|TOSLINK/.test(upperName)) return '影音線';
+  // USB5G / USB10G 黏尾，不可用 \bUSB\b
+  if (/TYPE-?[AC]|USB|THUNDERBOLT|\bTB[34]\b|充電線|傳輸線/.test(upperName)) return 'USB / 傳輸線';
+  return '其他線材';
 }
 
 /**
@@ -1302,9 +1375,10 @@ export function categorizeProduct(product: Product): Product {
   // 2. 其餘（含僅帶條件價的單品）→ 偵測真實零件分類
   let cat = product.category;
 
-  // 當前分類為 OTHER / PACKAGE（舊資料誤歸組合）或被污染時，重新分類
+  // 當前分類非 DIY（OTHER、或已被移除的舊分類如 optical_drive / software）、
+  // 是 PACKAGE（舊資料誤歸組合）、或被污染時，重新分類。
   // 加購優惠列在 PACKAGE 但非真組合，強制重判為單品
-  let needsRecategorize = cat === ProductCategory.OTHER || cat === ProductCategory.PACKAGE;
+  let needsRecategorize = !isDiyCategory(cat) || cat === ProductCategory.PACKAGE;
   if (cat === ProductCategory.PACKAGE && /【加購優惠】|^加購優惠/.test(raw)) needsRecategorize = true;
 
   if (cat === ProductCategory.CPU && (isCpuContaminated(raw) || looksLikeMotherboard(raw))) needsRecategorize = true;

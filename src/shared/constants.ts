@@ -23,12 +23,12 @@ export const COOLPC_CATEGORY_MAP: Record<string, ProductCategory> = {
   'n20': ProductCategory.NETWORK, // NAS/監控
   'n21': ProductCategory.OTHER, // 擷取卡/音效卡
   'n22': ProductCategory.HEADSET, // 耳機喇叭麥克風
-  'n23': ProductCategory.OPTICAL_DRIVE, // 光碟機
+  'n23': ProductCategory.OTHER, // 光碟機（外接燒錄機視為周邊，不入庫）
   'n24': ProductCategory.OTHER, // 外接盒
   'n25': ProductCategory.OTHER, // 視訊鏡頭
   'n26': ProductCategory.OTHER, // UPS/印表機
   'n27': ProductCategory.OTHER, // 擴充卡
-  'n28': ProductCategory.OTHER, // 線材
+  'n28': ProductCategory.CABLE, // 線材（含轉接頭 / KVM 切換器 / 影音分配器）
   'n29': ProductCategory.OS, // 作業系統/軟體
   'n30': ProductCategory.OTHER, // 福利品
 };
@@ -45,7 +45,8 @@ export const AUTOBUY_CATEGORY_MAP: Record<string, ProductCategory> = {
   '4': ProductCategory.HDD,
   '5': ProductCategory.GPU,
   '86': ProductCategory.GPU,
-  '6': ProductCategory.OPTICAL_DRIVE,
+  // 光碟機群組混雜「Windows 隨機版《含DVD》」與外接燒錄機，交給 detectCategory 判別
+  '6': ProductCategory.OTHER,
   '8': ProductCategory.PSU,
   '7': ProductCategory.CASE,
   '41': ProductCategory.FAN,
@@ -56,7 +57,7 @@ export const AUTOBUY_CATEGORY_MAP: Record<string, ProductCategory> = {
   '12': ProductCategory.HEADSET,
   '25': ProductCategory.NETWORK,
   '15': ProductCategory.OS,
-  '16': ProductCategory.SOFTWARE,
+  '16': ProductCategory.OS, // 應用軟體與作業系統合併為同一分類
   '24': ProductCategory.NETWORK,
   '28': ProductCategory.PSU,
 };
@@ -216,9 +217,8 @@ export const DIY_CATEGORIES: readonly ProductCategory[] = [
   ProductCategory.HEADSET,
   ProductCategory.SPEAKER,
   ProductCategory.PACKAGE,
+  ProductCategory.CABLE,
   ProductCategory.OS,
-  ProductCategory.SOFTWARE,
-  ProductCategory.OPTICAL_DRIVE,
 ];
 
 const DIY_CATEGORY_SET = new Set<string>(DIY_CATEGORIES);
@@ -255,9 +255,8 @@ export const CATEGORY_META: Record<ProductCategory, CategoryMeta> = {
   [ProductCategory.HEADSET]: { label: '耳機 / 麥克風', icon: '🎧', order: 14 },
   [ProductCategory.SPEAKER]: { label: '喇叭 / 音響', icon: '🔊', order: 15 },
   [ProductCategory.NETWORK]: { label: '網通設備', icon: '📡', order: 16 },
-  [ProductCategory.OPTICAL_DRIVE]: { label: '光碟機', icon: '📀', order: 17 },
-  [ProductCategory.OS]: { label: '作業系統', icon: '🪟', order: 18 },
-  [ProductCategory.SOFTWARE]: { label: '應用軟體', icon: '🛡️', order: 19 },
+  [ProductCategory.CABLE]: { label: '線材', icon: '🔗', order: 17 },
+  [ProductCategory.OS]: { label: '作業系統 / 軟體', icon: '🪟', order: 18 },
   [ProductCategory.PACKAGE]: { label: '整機 / 組合', icon: '🎁', order: 20 },
   [ProductCategory.OTHER]: { label: '其他', icon: '📦', order: 99 },
 };

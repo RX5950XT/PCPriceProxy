@@ -18,10 +18,9 @@ export enum ProductCategory {
   HEADSET = 'headset',
   SPEAKER = 'speaker',
   FAN = 'fan',
-  OPTICAL_DRIVE = 'optical_drive',
   NETWORK = 'network',
+  CABLE = 'cable',
   OS = 'os',
-  SOFTWARE = 'software',
   PACKAGE = 'package',
   OTHER = 'other',
 }

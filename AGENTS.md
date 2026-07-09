@@ -17,7 +17,8 @@
 - 語言與回覆：一律使用繁體中文（臺灣用語）。
 
 ## 架構與關鍵模組
-- 資料流：scrape → `normalizer` → `categorizer` → `diy-filter` → `matcher` → `products` / `match_groups`（聚合表）。非 `DIY_CATEGORIES` 與假 PACKAGE 不寫入 DB。
+- 資料流：scrape → `normalizer` → `categorizer` → `diy-filter` → `ingest`（upsert + 汰除孤兒列）→ `matcher` → `products` / `match_groups`（聚合表）。非 `DIY_CATEGORIES` 與假 PACKAGE 不寫入 DB。
+- **孤兒列必須每輪汰除**：`ingest.ts` 的 `ingestScrapeResult` 在 upsert 後刪掉同來源 `scraped_at` 落後的列（`deleteStaleProducts`）。少了這步，「已下架商品」與「改分類前被誤歸 DIY 分類的商品」會永遠卡在 DB——`deleteNonDiyProducts` 只看分類，救不了它們（`TOSHIBA` 含子字串 `OS` 曾讓整批外接硬碟卡在作業系統分類數輪）。爬取結果為空時不清，避免異常清空來源。scheduler 與兩個 refresh route 一律走 `ingestScrapeResult`，不要各自重寫管線。
 - 分類邏輯集中在 `src/processing/categorizer.ts`：`detectCategory`（關鍵字＋否定過濾器＋隱式偵測 PSU/SSD/MB/GPU/HDD/FAN）與 `detectSubcategory`（多層 `A > B > C`，用 `hierarchy()` 截斷未知層級、避免「其他X」噪音）。來源 category 不可信時要在 `categorizeProduct` 覆核，尤其 CPU 來源主機板/水冷（MasterLiquid「Core II」子字串誤中關鍵字 `Core i`，故 CPU 關鍵字改列具體 `Core i3/5/7/9`）/導熱貼、GPU 來源整機、PSU 行動電源/電源擴充線/免電源轉換線/硬碟外接盒（獨立電源開關/抽換/多 Bay）、CASE 掌機包、OS 燒錄機、SPEAKER 內建喇叭螢幕、FAN 來源水冷/GPU/PSU/集線器、NETWORK 來源印表機/充電座/耳麥/鍵鼠/滑鼠/喇叭/聲霸/工作站整機/掌機、KEYBOARD/MOUSE/COOLER 來源電競椅/電競桌家具（家具落 OTHER 由 diy-filter 刪除）。重判後的 `detectCategory` 關鍵字迴圈要套同一組污染過濾器（品牌名也會誤中關鍵字：Cooler Master 電競桌）。`RE_CPU_MODEL` 要能吃連字號型號（`Ultra7-265`）否則 HP 商用工作站會漏判整機。
 - 隱式偵測訊號詞要避開他品類常用詞：HDD 用「N轉」不用 `RPM`（風扇）、`BARRACUDA` 防 Razer 梭魚耳機、`HDD` 關鍵字防 HDMI 線型號；GPU 型號數字後界用 `(?!\d)` 不用 `\b`（`RTX 5070Ti`/`RX9070XT` 黏尾會漏）；風扇隱式簽章＝3/4Pin＋RPM，且 `isFanContaminated` 要擋盒裝 CPU 的「不含風扇」標示；PSU 隱式簽章支援「認證＋模組化/ATX3」（瓦數藏在型號如 UD750GM），但 `isBuiltInPsu` 的機殼要先排除。SSD 的「散熱片」只有在**無讀寫/TLC 簽章**時才算配件污染（`1TB含散熱片/讀14700/TLC` 是 SSD 本體）。筆電判定＝`筆電字樣 + 吋 + 儲存`，**不要求 CPU 型號**（Snapdragon X 不在 `RE_CPU_MODEL` 內）。
 - **組合 vs 條件價單品**：`isRealBundle`/`bundleReason`（真組合/整機/筆電/掌機 ALLY・Claw・Steam Deck：A+B 接真零件、CPU+GPU+RAM+儲存完整主機、欣亞PC/電競電腦等通路整機、周邊套裝、系統關鍵字）歸 PACKAGE。`detectPriceCondition`（搭板/限組裝/套裝搭購/加購優惠…）標記的**條件價單品也歸 PACKAGE**（子分類 `搭購價單品 > 原零件分類 > 條件`），因為它不是「可單買的零件淨價」——留在零件分類會讓同一顆 CPU 出現多張價格不一的卡。`categorizeProduct` 先算出真實零件分類再轉入 PACKAGE（`cat === OTHER` 不救回）；`diy-filter` 與 `deleteNonDiyProducts` 保留條件（真組合 **或** 有 `priceCondition`）；`matcher` 仍排除其跨店比價。audit 的 `Price-condition leak in part categories` 與 `CPU duplicate model cards` 必須為 0。
@@ -29,6 +30,10 @@
 - **PSU 子分類＝`尺寸 > 瓦數 > 認證 > 模組`**：尺寸 `detectPsuForm`（SFX-L→SFX→TFX→Flex→ATX，SFX 判斷須早於 ATX，因 SFX 電源也標 ATX3.0）；瓦數藏型號（UD750GM/Ai1600T）用 `psuWattFromModel`（黏字母、50 倍數、450~2000W）。污染詞新增 擴充線/轉換/外接盒/抽換/Bay/獨立電源開關。尺寸排序在 client `genericOrder`（`'ATX 電源'…`），與既有瓦數/認證 tier 同處。
 - **RAM 子分類頂層含「伺服器記憶體」**：ECC/RDIMM/Registered 不可混入桌上型 UDIMM（$1.5萬~16萬會污染消費級比價）。D4/D5 世代偵測**必用詞邊界** `\bD4\b`/`\bD5\b`——伺服器料號 `KSM64R52BD4` 內 `BD4` 會誤判 D5 記憶體成 DDR4。
 - **機殼子分類＝`品牌 > 系列`**（使用者要求依實際資料以品牌分組、品牌下依系列排序）：`CASE_SERIES` 為**品牌範圍**表（避免跨廠系列名碰撞），未知系列只到品牌層；品牌走 `extractBrand`，中文品牌需補 `BRAND_ALIASES`（曜越/迎廣/銀欣/全漢/振華/富鈞…）。
+- **線材是獨立主分類（`CABLE`），子分類單層類型**：coolpc `n28` 直接映射；sinya/autobuy 靠關鍵字＋`looksLikeCable` 隱式簽章（接頭配對 `公-公` / `A to B` / `CAT.6` ＋ 線長，缺一不可）。關鍵字**不可列入 `KVM`**（內建 KVM 的電競螢幕會被整批吸走，KVM 只用在子分類判定）。`isCableContaminated` 要擋顯卡立架/集線器/外接盒/讀卡機、`【27型】`＋電競螢幕/液晶螢幕、以及「認證＋模組化」的電源本體（電源規格會寫「黑色線材 / 雙色線材」）。反過來 `isPsuContaminated` **不可列入裸「線材」**，否則整顆電源被踢出 PSU。子分類料號黏字：`SFF8643`/`4SAS`/`USB5G` 不可用 `\b`。網路線歸線材，`NETWORK` 不再有「網路線材」層，`isNetworkContaminated` 要擋 `網路線|CAT.[5-8]`。
+- **`OS` 分類含作業系統與應用軟體**（使用者要求合併），子分類＝`作業系統 > Windows 11` / `應用軟體 > 防毒軟體`。關鍵字**不可列入裸 `OS`**（`支援 Mac OS`、`NON-OS`、`TOSHIBA`、`TosLink` 都含子字串 `OS`）。`isOsContaminated` 擋燒錄機/藍光，也要擋「附加密備份軟體」的外接硬碟、「支援監控軟體」的 UPS、「軟體最高 1500 萬畫素」的視訊鏡頭；但不可用 `DVD` 當排除詞——Windows 隨機版標示「《含DVD》」。
+- **光碟機不是分類**：外接燒錄機視為周邊不入庫（coolpc `n23` / autobuy `6` → `OTHER`）。autobuy 光碟機群組混有「Windows 隨機版《含DVD》」，必須交給 `detectCategory` 判別。audit 的 `Optical drive residue` 只抓「燒錄機/燒錄器」——機殼有「光碟機版 / 無光碟機版」（5.25 吋槽）規格字樣。
+- **伺服器 / 商用工作站是 PACKAGE 的獨立第一層**：Xeon 料號（`W5-3423`、`E-2436`）不在 `RE_CPU_MODEL` 內，`isServerWorkstation` 改以「整機字樣＋斜線規格＋記憶體＋(儲存或瓦數)」判定，否則會被品名裡的 `DVD-RW` 拖走。要排除 `isLaptopLike`（HP ZBOOK「行動工作站」是筆電）與主機板/機殼/記憶體等零件。
 - **鍵鼠/耳機/喇叭/網通＝`品牌 > 類型`**：`withBrand(type)` 抓不到品牌時退回只有類型層（不會消失）；品牌覆蓋率靠擴充 `KNOWN_BRANDS`＋`BRAND_ALIASES`（i-Rocks/Cherry/Keychron/Rapoo/Edifier漫步者/合勤Zyxel/圓剛AverMedia…）。網通類型層仍走裝置關鍵字（路由器/交換器/NAS/攝影機/網卡）。
 - GPU 型號比對不可掃未清理的裸數字；`gpuModelSearchText()` 需先移除價格、MHz、cm、瓦數，避免價格/時脈被誤判成 RX/RTX 型號。audit 的 `GPU model collision` 必須維持 0。
 - GPU 精確比對鍵在 `categorizer.gpuMatchKey`，需含晶片、產品線、VRAM 與顏色/OC 等 SKU 變體；非 PACKAGE 分類用 `matcher.exactMatchKey` 的「分類 + 品牌 + 顯示名 token 集合」收斂同顯示名重複列。exact group 必須把同 key 全部商品回寫同一個 `match_group_id`，避免非代表列變成 `mg-*` 重複卡；Dashboard render 再從 group products 選每來源最低價顯示。
@@ -38,7 +43,7 @@
 - 子分類排序單一邏輯在 `src/shared/subcategory-sort.ts`，API 與 Dashboard 都要用分類語意排序；不可用泛用 `Intel/AMD` 字串或 DB count 排主機板/GPU/CPU/RAM 樹。排序清單集中在 `SIDEBAR_ORDERS`（socket/chipset/vendor/gpuSeries/hddType/network/fan/packageType/combo/packageBase），由 `dashboard/script.ts` 以 `${JSON.stringify(ORDERS)}` 注入 client；**client `compareNodes` 不可自帶硬編碼清單**。PACKAGE 用 `packageRank` 加權（`top*10000 + combo*100 + base`），`packageBase` 由 `CATEGORY_META.order` 推導以免兩處維護。MB flat API 用加權組合 `sr*100000+cr*100+vr`（同時支援裸節點名與完整 `A > B > C` 字串）；`vendorRank` 取 `>` 最後一段葉節點，讓 flat API 品牌順序與樹一致。
 - 分類顯示名/圖示/排序集中在 `src/shared/constants.ts` 的 `CATEGORY_META`（單一真相）；品牌正規化用 `KNOWN_BRANDS` + `BRAND_ALIASES`，抽取一律走 `normalizer.extractBrand`（勿在 scraper 重複實作）。
 - 前端 Dashboard 拆成 `src/api/dashboard.ts`（模板）＋ `dashboard/styles.ts`＋`dashboard/script.ts`；側欄分類樹資料驅動自 `/api/v1/categories`。
-- 新增主分類時：在 `ProductCategory` enum、`CATEGORY_META`、各來源 category map 補齊即可，側欄會自動出現。
+- 新增主分類時：在 `ProductCategory` enum、`CATEGORY_META`、`DIY_CATEGORIES`、各來源 category map 補齊即可，側欄會自動出現。**移除主分類時**：`categorizeProduct` 的 `needsRecategorize` 判定用 `!isDiyCategory(cat)`，舊資料（`optical_drive` / `software`）會被強制重判而非直接刪除；新增排序表時記得同步 `SIDEBAR_ORDERS` 與 client 的 `semanticRank` 分支。
 
 ## 開發注意
 - tsx watch 每次存檔會重啟並立即重爬；批次改完再驗證。

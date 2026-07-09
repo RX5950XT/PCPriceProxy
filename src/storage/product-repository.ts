@@ -207,6 +207,17 @@ export class ProductRepository {
   }
 
   /**
+   * 刪除本輪未被刷新的孤兒列（商品已從來源下架，或分類邏輯改動後不再入庫）。
+   * 這些列的 `scraped_at` 停在上一輪，卻因為分類仍屬 DIY 而永遠不會被 `deleteNonDiyProducts` 清掉。
+   * 只在該來源本輪成功且有產出商品時執行，避免爬取失敗把整個來源清空。
+   */
+  deleteStaleProducts(source: string, scrapedAt: string): number {
+    return this.db.prepare(
+      'DELETE FROM products WHERE source = ? AND scraped_at < ?',
+    ).run(source, scrapedAt).changes;
+  }
+
+  /**
    * 刪除非 DIY 商品（OTHER、周邊雜訊、假 PACKAGE 如 VR/筆電搭購列）。
    * PACKAGE 保留真組合，以及被移出零件分類的條件價單品（搭板價 / 限組裝 / 加購價）。
    */

@@ -2,10 +2,7 @@ import { Hono } from 'hono';
 import { ProductRepository } from '../../storage/product-repository.js';
 import { getScraper, getAllScrapers } from '../../scrapers/registry.js';
 import { MemoryCache } from '../../storage/cache.js';
-import { normalizeProduct } from '../../processing/normalizer.js';
-import { categorizeProduct } from '../../processing/categorizer.js';
-import { MIN_VALID_PRICE } from '../../shared/constants.js';
-import { isDiyProduct } from '../../processing/diy-filter.js';
+import { ingestScrapeResult } from '../../ingest.js';
 import type { ApiResponse, SourceStatus, Source } from '../../shared/types.js';
 import { ApiError } from '../../shared/errors.js';
 
@@ -33,14 +30,9 @@ sourceRoutes.post('/refresh', (c) => {
       const repo = new ProductRepository();
       try {
         const result = await scraper.scrape();
-        const processed = result.products
-          .map(normalizeProduct)
-          .map(categorizeProduct)
-          .filter(p => p.price >= MIN_VALID_PRICE)
-          .filter(p => isDiyProduct(p));
-        repo.upsertMany(processed);
-        repo.logScrape(scraper.source, 'success', processed.length, result.durationMs);
-        console.log(`[Refresh API] ${scraper.source}: ${processed.length} products`);
+        const { stored, stale } = ingestScrapeResult(repo, result);
+        repo.logScrape(scraper.source, 'success', stored, result.durationMs);
+        console.log(`[Refresh API] ${scraper.source}: ${stored} products, ${stale} stale removed`);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         repo.logScrape(scraper.source, 'error', 0, 0, message);
@@ -84,16 +76,11 @@ sourceRoutes.post('/:name/refresh', async (c) => {
 
   try {
     const result = await scraper.scrape();
-    const processed = result.products
-      .map(normalizeProduct)
-      .map(categorizeProduct)
-      .filter(p => p.price >= MIN_VALID_PRICE)
-      .filter(p => isDiyProduct(p));
-
-    repo.upsertMany(processed);
+    const { stored, stale } = ingestScrapeResult(repo, result);
+    if (stale > 0) console.log(`[Refresh API] ${sourceName}: removed ${stale} stale products.`);
     const removed = repo.deleteNonDiyProducts();
     if (removed > 0) console.log(`[Refresh API] ${sourceName}: removed ${removed} non-DIY products.`);
-    repo.logScrape(sourceName, 'success', processed.length, result.durationMs);
+    repo.logScrape(sourceName, 'success', stored, result.durationMs);
     
     try {
       repo.updateMatchGroups();
@@ -107,7 +94,7 @@ sourceRoutes.post('/:name/refresh', async (c) => {
       success: true,
       data: {
         source: sourceName,
-        productsUpdated: processed.length,
+        productsUpdated: stored,
         durationMs: result.durationMs,
         errors: result.errors,
       },

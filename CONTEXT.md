@@ -4,7 +4,20 @@
 PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。
 
 ## 系統運作狀態（已驗證，2026-07-09）
-資料流：scrape → normalize → categorize → **diy-filter** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **16,169 件商品**、**1,416 組比價組**、20 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **25 項檢查全 PASS**。`npm run test` **90 tests**、`npm run build` 通過。dev server 開在 `http://localhost:3000`（`npm run dev`；tsx watch 啟動即爬一次三家）。
+資料流：scrape → normalize → categorize → **diy-filter** → **ingest（upsert + 汰除孤兒列）** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **13,690 件商品**、**1,293 組比價組**、19 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **29 項檢查全 PASS**。`npm run test` **102 tests**、`npm run build` 通過。dev server 開在 `http://localhost:3000`（`npm run dev`；tsx watch 啟動即爬一次三家）。
+
+> 商品數自第十六輪的 16,169 降到 13,690，是因為新增了孤兒列汰除：首次執行清掉 2,897 筆早已從來源下架、卻因分類仍屬 DIY 而永遠留在 DB 的殘留列。
+
+### 第十七輪重點（光碟機移除、OS/軟體合併、線材獨立、孤兒列汰除）
+- **使用者回饋**：光碟機分類裡怎麼會有伺服器工作站？光碟機不需要子分類、也不該單獨一類，裡面應該還有雜物；作業系統與應用軟體合併；線材應該單獨一類。
+- **光碟機的伺服器**：`HP Z6 G5 商用工作站`（$104,900）與 `ASUS RS300-E12-RS4 伺服器`（$49,900）被品名裡的 `DVD-RW` 拉進光碟機——Xeon 料號 `W5-3423` / `E-2436` 不在 `RE_CPU_MODEL` 內，所有整機規則都漏判。新增 `isServerWorkstation`（整機字樣＋斜線規格＋記憶體＋(儲存或瓦數)，排除 `isLaptopLike` 與零件字樣），歸 PACKAGE 新第一層「伺服器 / 工作站」（23 筆）。HP ZBOOK「行動工作站」帶吋數，仍歸筆電。
+- **光碟機分類移除**（使用者拍板：燒錄機視為周邊不入庫）：coolpc `n23` / autobuy `6` → `OTHER`。autobuy 光碟機群組混有 `Windows 11 隨機版《含DVD》`，交給 `detectCategory` 判別；`isOsContaminated` 因此**不可用 `DVD` 當排除詞**。
+- **OS + SOFTWARE 合併為 `OS`**（label「作業系統 / 軟體」），子分類兩層 `作業系統 > Windows 11` / `應用軟體 > 防毒軟體`。關鍵字**移除裸 `OS`**——`支援 Mac OS`、`NON-OS`、`TosLink`、以及 `TOSHIBA` 都含子字串 `OS`。
+- **線材（`CABLE`）獨立主分類**（340 筆）：coolpc `n28` 直接映射；sinya/autobuy 靠關鍵字＋`looksLikeCable` 隱式簽章（接頭配對 / `A to B` / `CAT.6` ＋線長）。子分類 8 型：影音線 107 / 機內排線・延長線 52 / USB・傳輸線 51 / 轉接頭・轉接線 50 / 網路線 42 / 切換器・分配器 24 / 電源延長線・插座 13 / 其他 1。網路線改歸線材，NETWORK 移除「網路線材」層。
+- **雙向檢查抓到的回歸**（都已修）：`KVM` 當關鍵字會把 9 台內建 KVM 的電競螢幕吸走 → 移出關鍵字（只留在子分類判定）＋`isCableContaminated` 加 `【27型】/電競螢幕/液晶螢幕`；電源規格寫「黑色線材 / 雙色線材」→ `isCableContaminated` 加「認證＋模組化」簽章，且 `isPsuContaminated` **移除裸「線材」**（既有 bug，會把整顆電源踢出 PSU）；`軟體最高1500萬畫素` 的羅技視訊鏡頭與 `附加密備份軟體` 的 Toshiba 外接硬碟 → `isOsContaminated` 補硬體字樣。
+- **孤兒列汰除（真正的「雜七雜八」來源）**：`os` 分類裡混著 Toshiba 外接硬碟、電競椅、USB HUB，`scraped_at` 停在上一輪——它們早已從來源下架，卻因分類屬 DIY 而永遠不被 `deleteNonDiyProducts` 清掉。新增 `src/ingest.ts`（`processScrapeResult` + `ingestScrapeResult`），upsert 後刪同來源 `scraped_at` 落後的列；scheduler 與兩個 refresh route 共用，消除三處重複管線。首次執行清掉 **2,897 筆**孤兒列。空結果不清，避免爬取異常清空來源。
+- **移除分類的安全網**：`categorizeProduct` 的 `needsRecategorize` 從 `cat === OTHER || cat === PACKAGE` 改為 `!isDiyCategory(cat) || cat === PACKAGE`，舊資料（`optical_drive` / `software`）被強制重判而非直接刪除。
+- **驗證**：`npm run test` **102 tests**（+12）、`npm run build`、重爬三家、`clean-and-rebuild`、`npm run audit` **29 項全 PASS**（新增 `Legacy category rows`、`Optical drive residue`、`Non-cable in cable`、`CABLE without subcategory`）。`Optical drive residue` 只抓「燒錄機/燒錄器」——機殼有「光碟機版」規格字樣。
 
 ### 第十六輪重點（條件價單品移出零件分類 + 整機/組合分區）
 - **使用者回饋**：CPU 分類裡 `i5-12400` 出現 8 張價格不一的卡；理論上只該有 `12400` 與 `12400F` 兩樣，其餘搭板/組裝價要移到「整機組合」；並要求把「整機/組合」分區。
