@@ -236,6 +236,11 @@
 - **規則**：新增主分類時，掃一遍所有 `isXxxContaminated` 的排除詞，找出「跟新分類同名」的詞——那些詞很可能本來就過寬。反向也要加護欄：`isCableContaminated` 用「認證＋模組化」簽章擋電源本體、用 `【27型】/電競螢幕` 擋螢幕。
 - **驗證**：離線快照做雙向檢查時要小心——sinya/autobuy 的 scraper 自己會呼叫 `detectCategory`，快照裡的 `srcCat` 是**舊程式**算出來的，會產生假回歸。必須重爬，或直接對 `detectCategory` 單測。
 
+## 51. CPU 短寫要覆蓋通路實際寫法，label 不要混世代命名
+- **問題**：Intel 第 10/12/14 代被輸出成 `Core i5 / Ultra 5`，但 Ultra 只屬於 Core Ultra 200S；Threadripper 初版只吃 `Threadripper 7960X`，漏了原價屋/欣亞常見短寫 `Ryzen TR 9960X`、`TR PRO 9995WX`。
+- **規則**：CPU label 拆清楚：Core i 世代只輸出 `Core i9/i7/i5/i3`；Core Ultra 200S 才輸出 `Ultra 9/7/5/3`。Threadripper 世代偵測支援 `Threadripper`、`Ryzen TR`、`TR PRO` 三種寫法。
+- **驗證**：改完不要只看單測；跑 `clean-and-rebuild` 後查 DB：Threadripper 應拆成 `Threadripper 9000/7000/...`，不可殘留泛用 `AMD > Threadripper`（除非真的沒有型號）。
+
 ## 44. 改成品牌分類前，先量測品牌覆蓋率並補齊別名，且留類型退路
 - **問題**：機殼/鍵盤/喇叭要改「品牌 > …」，但品牌抽取原本缺很多（機殼缺 29%、鍵盤 51%、喇叭 78%）——直接切換會讓半數商品落進「無品牌」黑洞。且中文品牌別名缺失（銀欣/曜越/漫步者/合勤…）是主因。
 - **規則**：切品牌分類前先 `SUM(brand IS NULL)` 量測，抽樣缺品牌樣本補 `KNOWN_BRANDS`＋`BRAND_ALIASES`（中文名一律加別名）。周邊用 `withBrand(type)`：抓不到品牌**退回只有類型層**，不讓商品從側欄消失。機殼系列表 `CASE_SERIES` 以**品牌為範圍**（避免跨廠系列名碰撞），未知系列只到品牌層。補完別名機殼無品牌 319→89、喇叭 78%→2%。

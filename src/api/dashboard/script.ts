@@ -171,7 +171,9 @@ export const DASHBOARD_SCRIPT = `
       if (intelGen) return 100 - Number(intelGen[1]);
       const ryzenGen = upper.match(/RYZEN\\s*(\\d{4})/);
       if (ryzenGen) return 300 - Number(ryzenGen[1]) / 100;
-      if (upper.includes('THREADRIPPER')) return 400;
+      const threadripperOrder = ['Threadripper 9000', 'Threadripper 7000', 'Threadripper 5000', 'Threadripper 3000', 'Threadripper TR4', 'Threadripper'];
+      const tr = orderedRank(label, threadripperOrder);
+      if (tr !== Number.MAX_SAFE_INTEGER) return 400 + tr;
       if (/CORE I9|ULTRA 9|RYZEN 9/.test(upper)) return 500;
       if (/CORE I7|ULTRA 7|RYZEN 7/.test(upper)) return 510;
       if (/CORE I5|ULTRA 5|RYZEN 5/.test(upper)) return 520;

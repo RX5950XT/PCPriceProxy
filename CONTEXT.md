@@ -3,10 +3,21 @@
 ## 專案現況
 PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。
 
-## 系統運作狀態（已驗證，2026-07-09）
-資料流：scrape → normalize → categorize → **diy-filter** → **ingest（upsert + 汰除孤兒列）** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **13,690 件商品**、**1,293 組比價組**、19 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **29 項檢查全 PASS**。`npm run test` **102 tests**、`npm run build` 通過。dev server 開在 `http://localhost:3000`（`npm run dev`；tsx watch 啟動即爬一次三家）。
+## 系統運作狀態（已驗證，2026-07-10）
+資料流：scrape → normalize → categorize → **diy-filter** → **ingest（upsert + 汰除孤兒列）** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **13,728 件商品**、**1,290 組比價組**、19 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **29 項檢查全 PASS**。`npm run test` **103 tests**、`npm run build` 通過。
 
-> 商品數自第十六輪的 16,169 降到 13,690，是因為新增了孤兒列汰除：首次執行清掉 2,897 筆早已從來源下架、卻因分類仍屬 DIY 而永遠留在 DB 的殘留列。
+> 商品數自第十六輪的 16,169 降到 13,683，是因為新增了孤兒列汰除：首次執行清掉 2,897 筆早已從來源下架、卻因分類仍屬 DIY 而永遠留在 DB 的殘留列，後續 CPU 清理又移除 5 筆非 DIY 污染。
+
+### 第十九輪重點（全庫複驗 + 內顯整機漏網修正）
+- **全庫複驗**：test 103 / audit 29 PASS / build 通過；三家 live scrape 正常（coolpc 5,854 / sinya 4,305 / autobuy 3,659）。CPU `i5-12400` 只剩 autobuy 一張乾淨卡是真實狀態——sinya 現售版本已改標「【組裝價】」，正確歸入 PACKAGE 搭購價單品。
+- **內顯整機漏網**：`華碩【I5管理者】I5-12400 / H610 / 8G DDR4 / 512G SSD`（$13,500）與 R5 3400G 版落在 **ssd** 分類——`isCompleteSpecSystem` 要求 GPU 型號，內顯機（無獨顯、無電源、無 Windows）全部簽章都不吃。修正：GPU **或** 晶片組皆可當第三訊號。全庫雙向掃描確認只吸走這 2 筆、12,137 筆零件零誤殺。
+- **驗證**：`npm run test` 103 passed（+1）、`clean-and-rebuild` 後 13,728 商品 / 1,290 groups、`npm run audit` 29 PASS、`npm run build` 通過。
+
+### 第十八輪重點（CPU 子分類清理 + 候選分類盤點）
+- **Intel CPU label 修正**：第 10/12/14 代 Core i 系列不再顯示 `Core i5 / Ultra 5` 這種混名；現在為 `Intel > 第 14 代 > Core i5/Core i7/Core i3`。Core Ultra 只出現在 `Intel > Core Ultra 200S > Ultra 9/7/5`。
+- **Threadripper 展開世代**：`AMD > Threadripper` 改為世代層，支援 `Threadripper 7960X`、`Ryzen TR 9960X`、`TR PRO 9995WX` 等短寫。現有 DB：`Threadripper 9000` 19 筆、`Threadripper 7000` 2 筆。
+- **候選新增主分類（尚未實作）**：最值得讓使用者決定的是 `影音 / PCIe 擴充卡`、`儲存外接盒 / 硬碟座`、`UPS / 不斷電系統`、`視訊鏡頭 / Webcam`、`可攜式快閃儲存（隨身碟/記憶卡）`。次要候選：`麥克風 / 錄音設備`、`印表機 / 掃描器`、`投影機`。不要先全加；擴充卡與外接盒最貼近 PC 零件，且要用白名單避免污染。
+- **驗證**：`npm run test` 102 passed；`clean-and-rebuild` 後 13,683 商品 / 1,293 groups；`npm run audit` 29 PASS；`npm run build` 通過。
 
 ### 第十七輪重點（光碟機移除、OS/軟體合併、線材獨立、孤兒列汰除）
 - **使用者回饋**：光碟機分類裡怎麼會有伺服器工作站？光碟機不需要子分類、也不該單獨一類，裡面應該還有雜物；作業系統與應用軟體合併；線材應該單獨一類。

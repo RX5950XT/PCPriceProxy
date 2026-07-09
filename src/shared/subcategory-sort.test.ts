@@ -12,6 +12,8 @@ describe('compareSubcategoryNode', () => {
       'Ryzen 7000 (Zen4)',
       'Ryzen 5000 (Zen3)',
       'Ryzen 8000 (Zen4)',
+      'Threadripper 7000',
+      'Threadripper 9000',
       'Threadripper',
       'Ryzen 9000 (Zen5)',
       'Ryzen 3000 (Zen2)',
@@ -21,6 +23,8 @@ describe('compareSubcategoryNode', () => {
       'Ryzen 7000 (Zen4)',
       'Ryzen 5000 (Zen3)',
       'Ryzen 3000 (Zen2)',
+      'Threadripper 9000',
+      'Threadripper 7000',
       'Threadripper',
     ]);
   });

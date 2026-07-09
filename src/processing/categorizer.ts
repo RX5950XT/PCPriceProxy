@@ -302,7 +302,9 @@ function isAiWorkstationSystem(name: string): boolean {
 
 function isCompleteSpecSystem(name: string): boolean {
   const hasRam = /\b\d{2,3}\s*G\b|DDR[45]/i.test(name);
-  return /\/.*\//.test(name) && RE_CPU_MODEL.test(name) && RE_GPU_MODEL.test(name) && hasRam && RE_STORAGE.test(name);
+  // 內顯整機（華碩【I5管理者】I5-12400 / H610 / 8G DDR4 / 512G SSD）沒有獨顯，晶片組也算完整主機訊號
+  const hasGpuOrChipset = RE_GPU_MODEL.test(name) || MOTHERBOARD_CHIPSET_RE.test(name);
+  return /\/.*\//.test(name) && RE_CPU_MODEL.test(name) && hasGpuOrChipset && hasRam && RE_STORAGE.test(name);
 }
 
 /**
@@ -831,7 +833,7 @@ function detectCpuGeneration(name: string, brand: string | null): string | null 
     return null;
   }
   if (brand === 'AMD') {
-    if (/THREADRIPPER|RYZEN\s*TR\b|TR-?PRO/i.test(name)) return 'Threadripper';
+    if (/THREADRIPPER|RYZEN\s*TR\b|TR\s*-?\s*PRO/i.test(name)) return detectThreadripperGeneration(name);
     const m = name.match(/(?:RYZEN[\sAI\d]*?|R[3579]\s*)([3-9])\d{3}/i);
     if (m) return AMD_GEN_MAP[m[1]] ?? null;
   }
@@ -841,6 +843,18 @@ function detectCpuGeneration(name: string, brand: string | null): string | null 
 function intelGenerationLabel(rawGeneration: string): string | null {
   const generation = parseInt(rawGeneration, 10);
   return generation >= 10 ? `第 ${generation} 代` : null;
+}
+
+function detectThreadripperGeneration(name: string): string {
+  const m = name.match(/(?:THREADRIPPER|RYZEN\s*TR|TR\s*-?\s*PRO|PRO)\s*(\d{4})/i);
+  if (!m) return 'Threadripper';
+  const first = m[1][0];
+  if (first === '9') return 'Threadripper 9000';
+  if (first === '7') return 'Threadripper 7000';
+  if (first === '5') return 'Threadripper 5000';
+  if (first === '3') return 'Threadripper 3000';
+  if (first === '2' || first === '1') return 'Threadripper TR4';
+  return 'Threadripper';
 }
 
 function detectCpuSubcategory(name: string): string | null {
@@ -853,10 +867,14 @@ function detectCpuSubcategory(name: string): string | null {
   const generation = detectCpuGeneration(name, brand);
 
   let series: string | null = null;
-  if (/i9|Ultra\s*9/i.test(name)) series = 'Core i9 / Ultra 9';
-  else if (/i7|Ultra\s*7/i.test(name)) series = 'Core i7 / Ultra 7';
-  else if (/i5|Ultra\s*5/i.test(name)) series = 'Core i5 / Ultra 5';
-  else if (/i3|Ultra\s*3/i.test(name)) series = 'Core i3';
+  if (/Ultra\s*9/i.test(name)) series = 'Ultra 9';
+  else if (/Ultra\s*7/i.test(name)) series = 'Ultra 7';
+  else if (/Ultra\s*5/i.test(name)) series = 'Ultra 5';
+  else if (/Ultra\s*3/i.test(name)) series = 'Ultra 3';
+  else if (/i9/i.test(name)) series = 'Core i9';
+  else if (/i7/i.test(name)) series = 'Core i7';
+  else if (/i5/i.test(name)) series = 'Core i5';
+  else if (/i3/i.test(name)) series = 'Core i3';
   else if (/Ryzen\s*9|R9\b/i.test(name)) series = 'Ryzen 9';
   else if (/Ryzen\s*7|R7\b/i.test(name)) series = 'Ryzen 7';
   else if (/Ryzen\s*5|R5\b/i.test(name)) series = 'Ryzen 5';

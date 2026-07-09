@@ -83,6 +83,16 @@ describe('categorizeProduct 分類順序', () => {
     expect(categorizeProduct(makeProduct(compact, ProductCategory.GPU)).category).toBe(ProductCategory.PACKAGE);
   });
 
+  it('內顯整機（CPU+晶片組+RAM+儲存、無獨顯無電源）不可留在零件分類', () => {
+    const igpuBuild = '華碩【I5管理者】I5-12400 / H610 / 8G DDR4 / 512G SSD, $13500 ◆ ★';
+    const apuBuild = '華碩【R5管理者】R5 3400G / A520 / 8G DDR4 / 512G SSD, $9990 ◆ ★';
+
+    expect(isRealBundle(igpuBuild)).toBe(true);
+    expect(isRealBundle(apuBuild)).toBe(true);
+    expect(categorizeProduct(makeProduct(igpuBuild, ProductCategory.SSD)).category).toBe(ProductCategory.PACKAGE);
+    expect(categorizeProduct(makeProduct(apuBuild, ProductCategory.SSD)).category).toBe(ProductCategory.PACKAGE);
+  });
+
   it('欣亞與品牌電競整機不可因 RTX 型號留在 GPU', () => {
     const sinyaPc = '欣亞PC【天秤座】(i5-12400F/H610M/16G/500GB M.2/技嘉 RTX5060/650W主日系/Windows 11 Home/4年完美保固)';
     const acerDesktop = 'Acer Predator Orion PO3-665 電競電腦 (Ultra 7-265F/RTX5060 8G/16GB DDR5/1TB PCIe/650W/Win11/三年保固/DG.E4TTA.001)';
@@ -154,11 +164,13 @@ describe('categorizeProduct 分類順序', () => {
     const shortRyzen7 = categorizeProduct(makeProduct('AMD R7 5800X3D 十週年紀念版 AM4輝煌十載', ProductCategory.CPU));
     const threadripper = categorizeProduct(makeProduct('AMD Ryzen Threadripper 7960X 處理器', ProductCategory.CPU));
     const oldIntel = categorizeProduct(makeProduct('Intel Core i7-5960X 八核心處理器《3.0Ghz/LGA2011》(代理商貨)', ProductCategory.CPU));
+    const ultra = categorizeProduct(makeProduct('Intel Core Ultra 7 265K 處理器(Core Ultra 200S)', ProductCategory.CPU));
 
     expect(ryzen9.subcategory).toBe('AMD > Ryzen 9000 (Zen5) > Ryzen 9');
     expect(shortRyzen7.subcategory).toBe('AMD > Ryzen 5000 (Zen3) > Ryzen 7');
-    expect(threadripper.subcategory).toBe('AMD > Threadripper');
+    expect(threadripper.subcategory).toBe('AMD > Threadripper 7000');
     expect(oldIntel.subcategory).toBe('Intel');
+    expect(ultra.subcategory).toBe('Intel > Core Ultra 200S > Ultra 7');
     expect([ryzen9.subcategory, threadripper.subcategory, oldIntel.subcategory].join(' ')).not.toContain('高階');
     expect(oldIntel.subcategory).not.toContain('第 5 代');
   });
