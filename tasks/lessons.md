@@ -201,6 +201,25 @@
 - **問題**：使用者懷疑資料造假，實查是誤分類污染——AIO 水冷「MasterLiquid **Core II**」被 CPU 關鍵字 `Core i` 子字串誤中；相變導熱貼「適用於**CPU**」被 `CPU` 誤中；電源擴充線/免電源**轉換線**/硬碟外接盒被 `電源` 誤收；聲霸/滑鼠被 `無線` 誤收；伺服器料號 `KSM64R52**BD4**` 內的 `BD4` 把 D5 記憶體誤判成 DDR4。
 - **規則**：分類關鍵字若是他品類常見子字串，一律改列**具體 token**（`Core i` → `Core i3/5/7/9`）或加**詞邊界**（`D4` → `\bD4\b`）。稽核每個類別時，用 `subcategory IS NULL/''` 的空子分類清單當「異物探針」——落不進該類既定結構的，通常就是污染。除污要兩側都補：污染過濾器擋掉 + 目標類別關鍵字能接住（水冷補 `Liquid/冷排/冷頭`）。
 
+## 45. 條件價單品留在零件分類 = 同型號多張價格不一的卡
+- **問題**：使用者看 CPU 分類的 `i5-12400`，出現 8 張卡（$4,950 / $5,100 / $5,500 / $5,600 / $5,900 / $6,100…）。實查其中 6 張都帶 `priceCondition`（組裝價 / 搭板價 / 限組裝）——它們是「買主機板才有的價格」，不是可單買的零件淨價。第五輪決定「條件價單品仍歸真分類、只排除跨店比價」在**列表視角**下是錯的：卡片仍會並排顯示。
+- **規則**：條件價單品歸 PACKAGE，子分類 `搭購價單品 > {原零件分類} > {條件}`；`categorizeProduct` 先算完真實零件分類（含污染覆核）再轉入，`cat === OTHER` 不救回。連動三處，缺一就出事：
+  1. `diy-filter.isDiyProduct`：PACKAGE 保留條件加上 `specs.priceCondition`。
+  2. `ProductRepository.deleteNonDiyProducts()`：它**沒有**呼叫 `isDiyProduct`，自己用 `isRealBundle` 判，會把 409 筆條件價單品直接刪掉（且刪掉後只能重爬才回得來）。
+  3. `matcher` 已排除 `priceCondition`，不必改。
+- **驗證**：audit 加 `Price-condition leak in part categories = 0` 與 `CPU duplicate model cards = 0`（同 brand+model 落在多個 match_group 即失敗）——後者直接鎖住使用者看到的症狀。
+
+## 46. A+B 組合判定的判別訊號是「加號後接品牌」，不是「加號後 45 字內有零件名詞」
+- **問題**：`[+][^+]{0,45}(電源|主機板|顯示卡|螢幕|滑鼠…)` 把大量單品判成組合：`M.2+ WIFI AM5主機板`、`NITRO+ 氮動 RX 9070 XT 顯示卡`、`低藍光+不閃屏 IPS螢幕`、`FK1+-B 電競滑鼠`、`Arctis Pro + GameDAC 耳機`、`Wi-Fi 6E+BT 5.3 …【支援機殼前置Type-C】`。autobuy 的 11 筆 PACKAGE **全部**是這類誤判。
+- **規則**：真組合的通路寫法一律是「商品A + **品牌** 商品B」（`+ 威剛 NB 16G`、`+【24型】AOC 24B36X`、`+微星 MAG A650BNL`）；假加號後面接的是規格詞。`plusFollowedByBrand()` 對每個加號取後 28 字（跳過 `【…】`）餵 `extractBrand`。這條 guard 一次解決全部型號/規格/介面加號，比逐條加中和規則穩健。
+- **配套**：`neutralizeFakePlus` 補「電源相位」（欣亞寫 `18+3+3 電源相位`）與**連鎖**數量加號（單次 `replace` 對 `18+3+3` 只吃掉第一個）。另加三個排除器：`isBuiltInPsu`（`內含 850W` 緊接瓦數才算；`內附顯卡支撐架` 不可誤殺機殼+電源真組合）、`isNasAppliance`（`DS225+【2Bay】`）、`isCableAccessory`（延長線「組合包」）。
+- **方法**：把 `isRealBundle` 拆出 `bundleReason()` 回傳規則名，對全庫跑一次「各規則命中樣本」就能定位誤判來源；改完做**雙向**檢查（移出 PACKAGE 的 vs 反向新判為組合的），移出的每一筆都要肉眼確認——第一次改就誤殺了 9 筆「螢幕支架組」與 3 筆 Snapdragon 筆電。
+
+## 47. 整機/筆電的品牌要從品名「開頭」抽，且取最早出現者
+- **問題**：`extractBrand` 掃全名 + 長品牌優先，於是 `HP HyperX OMEN 筆電` → HyperX、`DeskMini B760 + 金士頓 NB 8G` → Kingston、`ASUS【PN43】Intel N100` → Intel（`Intel` 5 字 > `ASUS` 4 字）。整機規格字串裡塞滿零件品牌。
+- **規則**：`systemBrand()` 剝除 `【…】(…)` 後取前 32 字，逐一對前 4 個 token 做 `extractBrand`，取最早命中者；中文品牌與型號黏接（`酷碼SNEAKER X`）再用前 12 字補掃一次。通路自組整機（酷!PC / 欣亞PC / 捷元 / DeskMini）品名根本沒有零件品牌，另立 `PACKAGE_VENDORS` 表。
+- **附帶**：`HP`/`LG` 這類 ≤3 字品牌靠 `brandMatches` 的詞邊界比對，不會誤中 `HyperX`；子品牌（ZOWIE→BenQ、ROG→ASUS）不可入 `KNOWN_BRANDS`，中文別名「狼蛛」也不可指向 AULA（Razer Ornata 中文名是「雨林狼蛛」）。
+
 ## 44. 改成品牌分類前，先量測品牌覆蓋率並補齊別名，且留類型退路
 - **問題**：機殼/鍵盤/喇叭要改「品牌 > …」，但品牌抽取原本缺很多（機殼缺 29%、鍵盤 51%、喇叭 78%）——直接切換會讓半數商品落進「無品牌」黑洞。且中文品牌別名缺失（銀欣/曜越/漫步者/合勤…）是主因。
 - **規則**：切品牌分類前先 `SUM(brand IS NULL)` 量測，抽樣缺品牌樣本補 `KNOWN_BRANDS`＋`BRAND_ALIASES`（中文名一律加別名）。周邊用 `withBrand(type)`：抓不到品牌**退回只有類型層**，不讓商品從側欄消失。機殼系列表 `CASE_SERIES` 以**品牌為範圍**（避免跨廠系列名碰撞），未知系列只到品牌層。補完別名機殼無品牌 319→89、喇叭 78%→2%。

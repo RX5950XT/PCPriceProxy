@@ -212,11 +212,35 @@ console.log(`CPU exact duplicate singletons: ${cpuExactSingletons.cnt} (target: 
 console.log(`Exact duplicate split keys: ${exactDuplicateSplits} (target: 0)`);
 
 console.log('\n--- Package single-item residue ---');
+// PACKAGE 合法成員 = 真組合/整機，或被移出零件分類的條件價單品（搭板價/限組裝/加購價）
 const packageRows = db.prepare(`
-  SELECT raw_name FROM products WHERE category = 'package'
-`).all() as { raw_name: string }[];
-const packageFalsePos = packageRows.filter(r => !isRealBundle(r.raw_name)).length;
+  SELECT raw_name, specs, subcategory FROM products WHERE category = 'package'
+`).all() as { raw_name: string; specs: string; subcategory: string | null }[];
+const packageFalsePos = packageRows.filter(
+  r => !isRealBundle(r.raw_name) && !parseSpecs(r.specs).priceCondition,
+).length;
 console.log(`Non-bundle in PACKAGE: ${packageFalsePos} (target: 0)`);
+
+const packageNoSubcat = packageRows.filter(r => !r.subcategory).length;
+console.log(`PACKAGE without subcategory: ${packageNoSubcat} (target: 0)`);
+
+// 條件價單品不是「零件淨價」，留在零件分類會讓同型號出現多張價格不一的卡
+const conditionLeak = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category != 'package' AND specs LIKE '%priceCondition%'
+`).get() as { cnt: number };
+console.log(`Price-condition leak in part categories: ${conditionLeak.cnt} (target: 0)`);
+
+// 同一顆 CPU（品牌+型號）只該有一張卡；多張＝條件價或 SKU 變體漏收斂
+const cpuDuplicateCards = db.prepare(`
+  SELECT COUNT(*) as cnt FROM (
+    SELECT brand, model FROM products
+    WHERE category = 'cpu' AND brand IS NOT NULL AND model IS NOT NULL
+    GROUP BY brand, model
+    HAVING COUNT(DISTINCT COALESCE(match_group_id, 'mg-' || id)) > 1
+  )
+`).get() as { cnt: number };
+console.log(`CPU duplicate model cards: ${cpuDuplicateCards.cnt} (target: 0)`);
 
 console.log('\n--- Cross-store price anomalies (>1.8x) ---');
 const priceAnomaly = db.prepare(`
@@ -265,6 +289,9 @@ const checks = [
   { name: 'CPU exact duplicate singletons = 0', pass: cpuExactSingletons.cnt === 0 },
   { name: 'Exact duplicate split keys = 0', pass: exactDuplicateSplits === 0 },
   { name: 'Package false positive = 0', pass: packageFalsePos === 0 },
+  { name: 'PACKAGE without subcategory = 0', pass: packageNoSubcat === 0 },
+  { name: 'Price-condition leak in part categories = 0', pass: conditionLeak.cnt === 0 },
+  { name: 'CPU duplicate model cards = 0', pass: cpuDuplicateCards.cnt === 0 },
   { name: 'Price anomalies = 0', pass: priceAnomaly.cnt === 0 },
 ];
 for (const c of checks) {

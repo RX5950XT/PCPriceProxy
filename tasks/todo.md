@@ -1,3 +1,26 @@
+# PCPriceProxy — 第十六輪：條件價單品移出零件分類 + 整機/組合分區
+
+## 本輪需求（使用者）
+- [x] CPU 分類只該有單一 CPU 的價格；`i5-12400`/`12400F` 應各一張卡，其餘搭板/組裝價要移到「整機組合」之類的類別。
+- [x] 「整機/組合」類別要分區、把內容分類一下。
+
+## 執行計畫
+- [x] 診斷：`isRealBundle` 拆出 `bundleReason()`，對全庫 1,807 筆 PACKAGE 跑規則命中分布，定位誤判來源。
+- [x] 除污：`plusFollowedByBrand` guard（加號後須接品牌）＋ `isBuiltInPsu` / `isNasAppliance` / `isCableAccessory`；`neutralizeFakePlus` 補電源相位與連鎖數量加號；barebone 排除 模組/機殼；`整機` → `整機電腦|整機主機`。
+- [x] 回歸修正（雙向檢查抓到）：`isLaptop` 去掉 CPU 型號必要條件（Snapdragon）、`bundle-keyword` 補 `優惠組合|組合優惠|螢幕支架組`、`isSsdContaminated` 的散熱片改條件式、`looksLikePsu` 排除機殼內含電源、`isFanContaminated` 擋「不含風扇」。
+- [x] 條件價：`categorizeProduct` 轉入 PACKAGE + `搭購價單品 > 原分類 > 條件`；`diy-filter` 與 `deleteNonDiyProducts` 同步保留（後者原本會刪光）。
+- [x] 分區：`detectPackageSubcategory`（整機電腦/筆電/準系統/掌機/零件組合/搭購價單品）＋ `systemBrand`（品名開頭取品牌）＋ `PACKAGE_VENDORS` ＋ `comboType`（含 `looksLikePsuModel`）。
+- [x] 排序：`SIDEBAR_ORDERS` 補 `packageType`/`combo`/`packageBase`（由 `CATEGORY_META.order` 推導），`packageRank` 加權，client `compareNodes` 同步。
+- [x] 稽核：audit 新增 4 項（PACKAGE 無子分類、條件價外洩、CPU 重複型號卡、假 PACKAGE 判定改看條件價）。
+- [x] 驗證：90 tests、build、重爬、clean-and-rebuild、audit 25 項全 PASS、live API 抽樣。
+
+## 本輪回顧
+- CPU `12400` 從 8 張卡收斂成 2 張（`i5-12400` 兩店比價 + `i5-12400F` 單店），與使用者預期一致。
+- 根因不只條件價：autobuy 的 11 筆 PACKAGE 全是假加號誤判（`NITRO+`、`FK1+-B`、`M.2+ WIFI`、`低藍光+不閃屏`）。判別訊號改為「加號後接品牌」後一次解決。
+- PACKAGE 2,069 筆分成 6 區：筆電 826 / 零件組合 490 / 整機電腦 347 / 搭購價單品 296 / 準系統 106 / 掌機 9；無子分類節點 = 0，缺品牌節點 = 0，「其他組合」43→20。
+
+---
+
 # PCPriceProxy — 第十五輪：全類別稽核除污 + PSU/RAM 結構 + 機殼/周邊品牌分類
 
 ## 本輪需求（使用者）

@@ -1,5 +1,6 @@
 import { ProductCategory } from '../shared/types.js';
 import type { Product } from '../shared/types.js';
+import { CATEGORY_META } from '../shared/constants.js';
 import { extractBrand } from './normalizer.js';
 
 /**
@@ -121,8 +122,10 @@ export function isSsdContaminated(name: string): boolean {
   const upper = name.toUpperCase();
   // M.2 外接盒（Arion/Cobble 等）：有 USB10G/雙模訊號但無任何真實容量 → 非 SSD 本體
   if (/USB\s*10G|雙模/i.test(name) && !/\d+(?:\.\d+)?\s*TB|(?<!USB\s?)\b\d{3,4}\s*G+B?\b/i.test(name)) return true;
+  // 「1TB 含散熱片/讀14700/TLC」是 SSD 本體規格；只有無讀寫/顆粒簽章時才是散熱片配件
+  if (/散熱片|散熱貼|導熱/.test(name) && !/讀\s*[:取]?\s*\d{3,5}|寫\s*\d{3,5}|\bTLC\b|\bQLC\b/i.test(name)) return true;
   const excludes = [
-    '筆電', '工作站', '工作主機', '外接盒', '散熱片', '散熱貼', '導熱', '主機板', '準系統',
+    '筆電', '工作站', '工作主機', '外接盒', '主機板', '準系統',
     '外接座', '轉接卡', '轉接線', '螺絲', '外接硬碟', '行動硬碟', '硬碟儲存',
     'MY BOOK', 'EXPANSION DESKTOP', '新黑鑽', '雙硬碟', '3.5吋外接'
   ];
@@ -180,6 +183,7 @@ export function isKeyboardContaminated(name: string): boolean {
 
 /** FAN 來源常混入水冷、GPU（三風扇規格）、PSU、集線器/燈條/延長線等配件。 */
 export function isFanContaminated(name: string): boolean {
+  if (/不含風扇|不附風扇|無風扇/.test(name)) return true;              // 盒裝 CPU 的「不含風扇」標示
   if (/水冷|一體式|\bAIO\b|下吹式|導管|塔散/i.test(name)) return true; // AIO 與 CPU 散熱器
   if (RE_GPU_MODEL.test(name)) return true; // 顯卡以「三風扇」規格誤中 FAN 關鍵字
   if (looksLikePsu(name)) return true;
@@ -219,10 +223,13 @@ const MOTHERBOARD_CHIPSETS = [...INTEL_CHIPSETS, ...AMD_CHIPSETS] as const;
 const MOTHERBOARD_CHIPSET_RE = new RegExp(`\\b(?:${MOTHERBOARD_CHIPSETS.join('|')})[A-Z-]*\\b`, 'i');
 const MOTHERBOARD_SIGNAL_RE = /相\s*(電源|供電)|供電|\bDIMM\b|\bM-?ATX\b|MATX|MICRO-ATX|Mini-ITX|\bE?-?ATX\b|\bEEB\b|LGA\d|\bAM[45]\b|晶片組|主機板|\bLAN\b/i;
 
-/** 真筆電 = 筆電字樣 + CPU 型號 + 螢幕吋數 + 儲存（排除「筆電記憶體/散熱器/支架」等配件）。 */
+/**
+ * 真筆電 = 筆電字樣 + 螢幕吋數 + 儲存（排除「筆電記憶體/散熱器/支架」等配件——配件不會同時有吋數與儲存）。
+ * 不要求 CPU 型號：Snapdragon X 等非 x86 筆電的型號不在 `RE_CPU_MODEL` 內。
+ */
 function isLaptop(name: string): boolean {
   if (!/筆電|筆記型|LAPTOP|電競筆/i.test(name)) return false;
-  return RE_CPU_MODEL.test(name) && /\d{1,2}(?:\.\d)?\s*吋/.test(name) && RE_STORAGE.test(name);
+  return /\d{1,2}(?:\.\d)?\s*吋/.test(name) && RE_STORAGE.test(name);
 }
 
 /** 預建成品機 / 迷你 PC（含作業系統或 NON-OS）：CPU 型號 + Windows + 儲存。 */
@@ -255,48 +262,114 @@ function isCompleteSpecSystem(name: string): boolean {
  * 僅這類歸入 PACKAGE；單純帶條件價的單品（80+金牌電源、限組裝硬碟）不算組合。
  */
 export function isRealBundle(name: string): boolean {
+  return bundleReason(name) !== null;
+}
+
+/**
+ * 回傳命中的組合判定規則名（未命中為 null）。
+ * 拆出規則名讓 audit / 診斷腳本能定位「哪一條規則造成誤判」，避免只能黑箱猜測。
+ */
+export function bundleReason(name: string): string | null {
   // 加購優惠是單品搭售條件，不是組合本體
-  if (/【加購優惠】|^加購優惠/.test(name)) return false;
+  if (/【加購優惠】|^加購優惠/.test(name)) return null;
+  // NAS 是單品；型號結尾常帶加號（Synology DS225+）會被 A+B 誤判
+  if (isNasAppliance(name)) return null;
 
   // 1. 完整成品系統 / 筆電 / 準系統 / 迷你 PC / 掌機
-  if (isLaptop(name)) return true;
-  if (/掌機|ROG\s*(?:XBOX\s*)?ALLY|CLAW\s*A\d|STEAM\s*DECK|LEGION\s*GO/i.test(name) && RE_STORAGE.test(name)) return true;
-  if (/準系統|迷你主機|迷你電腦|MINI\s*PC|\bNUC\b|\bCUBI\b|\bBRIX\b|DeskMini|DeskMeet|品牌電腦|品牌機|套裝電腦|套裝主機|桌上型主機|桌上型電腦|電競電腦|欣亞PC|整機/i.test(name)) return true;
-  if (isPrebuiltSystem(name)) return true;
-  if (isAiWorkstationSystem(name)) return true;
-  if (isCompleteSpecSystem(name)) return true;
-  if (/CPU\.RAM\.DISK選購|PRO\s*DP21/i.test(name) && MOTHERBOARD_CHIPSET_RE.test(name)) return true;
+  if (isLaptop(name)) return 'laptop';
+  if (/掌機|ROG\s*(?:XBOX\s*)?ALLY|CLAW\s*A\d|STEAM\s*DECK|LEGION\s*GO/i.test(name) && RE_STORAGE.test(name)) return 'handheld';
+  const barebone = barebonePcReason(name);
+  if (barebone) return barebone;
+  if (isPrebuiltSystem(name)) return 'prebuilt-os';
+  if (isAiWorkstationSystem(name)) return 'ai-workstation';
+  if (isCompleteSpecSystem(name)) return 'complete-spec';
+  if (/CPU\.RAM\.DISK選購|PRO\s*DP21/i.test(name) && MOTHERBOARD_CHIPSET_RE.test(name)) return 'select-build';
   // 品牌電競桌機（Infinite / AORUS PRIME 等型號 + CPU + WIN + 儲存）
   if (/Infinite\s*S\d|Infinite\s*Z\d|AORUS\s*PRIME|商用工作站|Z2G?\d/i.test(name) &&
       RE_CPU_MODEL.test(name) && /WIN|NON-?OS/i.test(name) && RE_STORAGE.test(name)) {
-    return true;
+    return 'branded-desktop';
   }
-  if (/【AI\s*TOP[^】]+】/i.test(name) && RE_GPU_MODEL.test(name) && /\/.*\//.test(name)) return true;
-  if (isSlashBuild(name)) return true;
-  // 2. 明確組合關鍵字
-  if (/大全配|全配|超值組|組合包|套餐|欣巴組|捷元品牌電腦|合購|限量組合/i.test(name)) return true;
-  // 3. A+B 核心零件搭售（先中和假加號與機殼規格假名詞，避免單品被誤判）
-  const cleaned = name
-    .replace(/\d[\d+＋\s]*相\s*(電源|供電)/gi, ' 相供電 ')               // 主機板 N+N+N 相電源 VRM
+  if (/【AI\s*TOP[^】]+】/i.test(name) && RE_GPU_MODEL.test(name) && /\/.*\//.test(name)) return 'ai-top';
+  if (isSlashBuild(name)) return 'slash-build';
+  // 2. 明確組合關鍵字（線材「延長線組合包」不是零件組合）
+  if (/大全配|全配|超值組|組合包|套餐|欣巴組|捷元品牌電腦|合購|限量組合|優惠組合|組合優惠|螢幕支架組/i.test(name) && !isCableAccessory(name)) return 'bundle-keyword';
+
+  // 3. A+B 核心零件搭售。先中和假加號，再要求「加號後接另一件商品的品牌」——
+  //    通路寫真組合一律是「商品A + 品牌 商品B」；假加號後面接的是規格詞（WIFI / BT 5.3 / 不閃屏 / -B）。
+  const cleaned = neutralizeFakePlus(name);
+  const bundledWithBrand = plusFollowedByBrand(cleaned);
+  if (bundledWithBrand &&
+      /[+＋][^+＋]{0,45}(電源|電供|POWER\b|主機板|記憶體|RAM\b|DDR[45]|SSD|硬碟|固態|螢幕|MONITOR|OFFICE|WIN1|顯卡|顯示卡|繪圖卡|機殼|鍵盤|滑鼠|喇叭|耳機|電競桌)/i.test(cleaned)) return 'plus-part';
+  if (/(螢幕|顯示器|MONITOR).{0,90}[+＋]\)?[^+＋]{0,90}(鍵盤|滑鼠|狼蛛|AULA|電競桌)/i.test(cleaned)) return 'plus-monitor-peripheral';
+  if (/(?:^|[^A-Z0-9])[+＋]\s*[^+＋]{0,60}(?:\b(?:RTX|GTX)\s?\d{3,4}\b|\bRX\s?\d{3,4}\b|\bArc\s?[AB]\d{3}\b)/i.test(cleaned)) return 'plus-gpu';
+  if (RE_CPU_MODEL.test(name) && /[+＋]\s*[^+＋]{0,80}\b(?:Z890|W890|Z790|W790|B860|B760|H810|H610|W680|X870E|X870|WRX90|TRX50|B850|B840|X670E|X670|B650E|B650|A620|B550|A520)[A-Z-]*\b/i.test(cleaned)) return 'plus-cpu-chipset';
+  // 3b. A+B：+ 後接「瓦數 + 80+牌」的電源（如 顯卡/主機板 + 海韻 750W 金牌）；cooler 的 230W 無牌不會中
+  if (!isBuiltInPsu(name) &&
+      /[+＋][^+＋]{0,30}\d{3,4}\s?W\b[^+＋]{0,12}(金牌|銅牌|白金|鈦金|銀牌|白牌)/i.test(cleaned)) return 'plus-psu-rated';
+  // 4. 機殼 + 電源 搭售：同時具備機殼與瓦數/電源訊號且有加號（須用中和後字串，否則「80+金牌 … 雙倉機殼專用 850W」電源單品會誤判）
+  if (!isBuiltInPsu(name) &&
+      /[+＋]/.test(cleaned) && /機殼|透側|玻璃側|全景玻璃/i.test(cleaned) && /電源|電供|\d{3,4}\s?W\b/i.test(cleaned)) return 'case-plus-psu';
+  return null;
+}
+
+/**
+ * 真組合的加號後緊接「另一件商品」，通路慣例先寫品牌（`+ 威剛 NB 16G`、`+【24型】AOC 24B36X`）。
+ * 假加號後面接的是規格或型號片段（`M.2+ WIFI`、`NITRO+ 氮動`、`低藍光+不閃屏`、`FK1+-B`）。
+ */
+function plusFollowedByBrand(cleaned: string): boolean {
+  for (const m of cleaned.matchAll(/[+＋]\s*(?:【[^】]*】\s*)?([^+＋]{2,28})/g)) {
+    if (extractBrand(m[1])) return true;
+  }
+  return false;
+}
+
+/**
+ * 機殼「內附/內含 200W 電源」是本體規格，不是搭售另一顆電源，也不代表商品是電源。
+ * 須緊接瓦數/電源詞才算，否則「內附顯卡支撐架」的機殼 + 電源真組合會被誤殺。
+ */
+export function isBuiltInPsu(name: string): boolean {
+  return /內[附含][^\/,、]{0,8}(\d{2,4}\s?W\b|電源|PSU)/i.test(name);
+}
+
+/** 線材類「延長線組合包 / 理線組」不是零件組合。 */
+function isCableAccessory(name: string): boolean {
+  return /編織線|延長線|理線|線材|轉接線|線規/.test(name);
+}
+
+/** NAS 機（Synology DS225+ / QNAP TS-464 / 華芸 AS5402T【2Bay】）是單品，非組合。 */
+function isNasAppliance(name: string): boolean {
+  return /\d+\s*Bay/i.test(name) &&
+    /NAS|SYNOLOGY|群暉|QNAP|威聯通|華芸|ASUSTOR|\bDS\d{3}|\bTS-?\d{3}/i.test(name);
+}
+
+/** 準系統 / 迷你 PC / 通路整機的關鍵字判定。 */
+function barebonePcReason(name: string): string | null {
+  // 準系統關鍵字易被配件誤中：`mini PCIE 無線模組`、`DeskMini 專用 WiFi 模組`、`Wooden NUC DIY 木製機殼`
+  if (/準系統|迷你主機|迷你電腦|MINI\s*PC(?!IE)|\bNUC\b|\bCUBI\b|\bBRIX\b|DeskMini|DeskMeet/i.test(name) &&
+      !/模組|機殼/.test(name)) {
+    return 'barebone';
+  }
+  // 「整機」二字單獨用會誤中條件價 `~限整機~`（三星 SSD）；改用具體詞
+  if (/品牌電腦|品牌機|套裝電腦|套裝主機|桌上型主機|桌上型電腦|電競電腦|欣亞PC|整機電腦|整機主機/i.test(name)) return 'retail-system';
+  return null;
+}
+
+/** 中和「不是組合語意」的加號：VRM 相數、機殼 clearance、PSU 效率認證、容量與數量加號。 */
+function neutralizeFakePlus(name: string): string {
+  return name
+    .replace(/\d[\d+＋\s]*(相\s*(電源|供電)|電源相位)/gi, ' 相供電 ')     // 主機板 N+N+N 相電源 VRM（欣亞寫「18+3+3 電源相位」）
     .replace(/顯[示]?卡\s*(長|支援|支撐架?|\d{2,3}\s*(mm|cm|公分))/gi, ' ') // 機殼 clearance：顯卡408mm/顯示卡支撐架（保留「+顯卡 RTX」真組合）
     .replace(/塔散\s*\d{2,3}/gi, ' ')                                     // 機殼 clearance：塔散172mm
     .replace(/\b(8\d|9[0-2])\s*[+＋]/gi, '$1 ')                           // PSU 效率認證 80+/85+/90+/92+（晶片組為字母前綴、瓦數無此型，皆安全）
     .replace(/(\d+)\s*G\b\s*[+＋]\s*(\d+)\s*G\b/gi, '$1G $2G')            // 容量加號 8G+8G
-    .replace(/(\d+)\s*[+＋]\s*(\d+)/g, '$1 $2');                          // 數量加號 2+2
-  if (/[+＋][^+＋]{0,45}(電源|電供|POWER\b|主機板|記憶體|RAM\b|DDR[45]|SSD|硬碟|固態|螢幕|MONITOR|OFFICE|WIN1|顯卡|顯示卡|繪圖卡|機殼|鍵盤|滑鼠|喇叭|耳機|電競桌)/i.test(cleaned)) return true;
-  if (/(螢幕|顯示器|MONITOR).{0,90}[+＋]\)?[^+＋]{0,90}(鍵盤|滑鼠|狼蛛|AULA|電競桌)/i.test(name)) return true;
-  if (/(?:^|[^A-Z0-9])[+＋]\s*[^+＋]{0,60}(?:\b(?:RTX|GTX)\s?\d{3,4}\b|\bRX\s?\d{3,4}\b|\bArc\s?[AB]\d{3}\b)/i.test(cleaned)) return true;
-  if (RE_CPU_MODEL.test(name) && /[+＋]\s*[^+＋]{0,80}\b(?:Z890|W890|Z790|W790|B860|B760|H810|H610|W680|X870E|X870|WRX90|TRX50|B850|B840|X670E|X670|B650E|B650|A620|B550|A520)[A-Z-]*\b/i.test(cleaned)) return true;
-  // 3b. A+B：+ 後接「瓦數 + 80+牌」的電源（如 顯卡/主機板 + 海韻 750W 金牌）；cooler 的 230W 無牌不會中
-  if (/[+＋][^+＋]{0,30}\d{3,4}\s?W\b[^+＋]{0,12}(金牌|銅牌|白金|鈦金|銀牌|白牌)/i.test(cleaned)) return true;
-  // 4. 機殼 + 電源 搭售：同時具備機殼與瓦數/電源訊號且有加號
-  if (/[+＋]/.test(name) && /機殼|透側|玻璃側|全景玻璃/i.test(name) && /電源|電供|\d{3,4}\s?W\b/i.test(name)) return true;
-  return false;
+    .replace(/\d+(?:\s*[+＋]\s*\d+)+/g, m => m.replace(/[+＋]/g, ' '));    // 連鎖數量加號 2+2、18+3+3（單次 replace 無法吃連鎖）
 }
 
 /** 隱式電源偵測：品名無「電源」字但具 PSU 簽章（瓦數 + 80+認證/牌/模組化/ATX3/SFX）。 */
 export function looksLikePsu(name: string): boolean {
   if (isPsuContaminated(name)) return false;
+  // 「ITX 電腦機殼(內含 SFX 850W)」的瓦數屬機殼規格，本體不是電源
+  if (isBuiltInPsu(name)) return false;
   const hasWatt = /\b\d{3,4}\s?W\b/i.test(name);
   const hasSig = /\b(8\d|9[0-2])\s*[+＋]|金牌|銅牌|白金牌|鈦金|銀牌|白牌|PLATINUM|GOLD|BRONZE|TITANIUM|全模組|半模組|直出|ATX\s*3\.|\bSFX\b|12VHPWR/i.test(name);
   if (hasWatt && hasSig) return true;
@@ -1008,6 +1081,88 @@ function detectCaseSubcategory(name: string): string | null {
   return hierarchy(brand, detectCaseSeries(name, brand));
 }
 
+// 通路自組整機的「品牌」不是零件品牌，須另表辨識（extractBrand 抓不到）
+const PACKAGE_VENDORS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/酷\s*[!！]\s*PC/i, '原價屋 酷!PC'],
+  [/欣亞PC/i, '欣亞PC'],
+  [/精選遊戲主機|精選主機|JOHN選|限定主機/i, '欣亞精選主機'],
+  [/捷元|Genuine/i, '捷元'],
+  // 專有產品線，品名常不寫品牌
+  [/DeskMini|DeskMeet/i, 'ASRock'],
+  [/PRO\s*DP21|\bCUBI\b/i, 'MSI'],
+];
+
+/**
+ * 整機/筆電的品牌在品名**開頭**；`extractBrand` 掃全名會抓到規格裡的零件品牌
+ * （`筆電 > HyperX`、`準系統 > Kingston`），且長品牌優先會讓 `ASUS … Intel N100` 抓成 Intel。
+ * 故逐一檢查開頭前幾個 token，取最早出現的品牌。
+ */
+function systemBrand(name: string): string | null {
+  const head = name.replace(/【[^】]*】|\([^)]*\)|\[[^\]]*\]/g, ' ').trim();
+  for (const token of head.slice(0, 32).split(/[\s/,|]+/).filter(Boolean).slice(0, 4)) {
+    const brand = extractBrand(token);
+    if (brand) return brand;
+  }
+  // 中文品牌常與型號黏接（酷碼SNEAKER X），token 切不開；僅在最前段補掃
+  return extractBrand(head.slice(0, 12)) ?? null;
+}
+
+function packageVendor(name: string): string | null {
+  const vendor = PACKAGE_VENDORS.find(([re]) => re.test(name))?.[1];
+  return vendor ?? systemBrand(name);
+}
+
+// coolpc 機殼品名多不寫「機殼」二字，只列板型與 clearance（`/方形進氣孔/M-ATX`、`顯卡長33.6/ITX`）
+const CASE_SIGNAL_RE = /機殼|透側|玻璃側|全景玻璃|進氣孔|網狀|MESH|CPU高|顯卡長|\bM-?ATX\b|\bE?-?ATX\b|\bITX\b/i;
+
+/**
+ * 電源型號常把瓦數藏在字母後綴裡而不寫「W」（`SX850P`、`NE850GM`、`A1000GS`）。
+ * 要求數字為 450~2000 的 50 倍數且**緊接**字母後綴，機殼型號（`DS900 黑`、`AIR 903`、`V100R`）不會誤中。
+ */
+function looksLikePsuModel(name: string): boolean {
+  for (const m of name.matchAll(/(\d{3,4})(?:GM|GS|GX|GH|PT|P|W)\b/gi)) {
+    const watt = parseInt(m[1], 10);
+    if (watt >= 450 && watt <= 2000 && watt % 50 === 0) return true;
+  }
+  return false;
+}
+
+/** 零件組合的搭配類型（依實際在售組合：機殼+電源最多，其次 CPU+主機板、螢幕+周邊）。 */
+function comboType(name: string): string {
+  const hasPsu = /電源|電供|\d{3,4}\s?W\b|全模組|半模組/i.test(neutralizeFakePlus(name)) || looksLikePsuModel(name);
+  const hasCooler = /水冷|散熱器|塔散|\bAIO\b|龍王|龍神|WATERFORCE|飛鷹|鷹魂/i.test(name);
+  if (hasPsu && hasCooler) return '散熱器 + 電源';
+  if (hasPsu && CASE_SIGNAL_RE.test(name)) return '機殼 + 電源';
+  if (hasCooler && CASE_SIGNAL_RE.test(name)) return '散熱器 + 機殼';
+  if (RE_CPU_MODEL.test(name) && (MOTHERBOARD_CHIPSET_RE.test(name) || /主機板/.test(name))) return 'CPU + 主機板';
+  if (MOTHERBOARD_CHIPSET_RE.test(name) && /DDR[45]|記憶體|SSD|NVMe|\d+\s?TB/i.test(name)) return '主機板 + 記憶體/儲存';
+  if (/螢幕|顯示器|MONITOR/i.test(name)) return '螢幕 + 周邊';
+  if (/鍵盤|滑鼠|耳機|鼠墊|鍵鼠|光鍵|靈刃/i.test(name)) return '周邊套裝';
+  if (RE_GPU_MODEL.test(name)) return '顯卡搭購組';
+  return '其他組合';
+}
+
+/**
+ * 整機 / 組合的子分類樹。
+ * `baseCategory` 有值代表這是「帶條件價的零件單品」（搭板價 / 限組裝 / 加購價）——
+ * 它不是可單買的零件淨價，故不留在零件分類，改列於此並保留原零件分類作為第二層。
+ */
+function detectPackageSubcategory(name: string, baseCategory?: ProductCategory): string | null {
+  if (baseCategory) {
+    return hierarchy('搭購價單品', CATEGORY_META[baseCategory].label, detectPriceCondition(name));
+  }
+  if (/掌機|ROG\s*(?:XBOX\s*)?ALLY|CLAW\s*A\d|STEAM\s*DECK|LEGION\s*GO/i.test(name)) return hierarchy('掌機', systemBrand(name));
+  if (isLaptopLike(name) && RE_STORAGE.test(name)) return hierarchy('筆電', systemBrand(name));
+  if (/準系統|迷你主機|迷你電腦|MINI\s*PC(?!IE)|\bNUC\b|\bCUBI\b|\bBRIX\b|DeskMini|DeskMeet|PRO\s*DP21|CPU\.RAM\.DISK選購/i.test(name)) {
+    return hierarchy('準系統 / 迷你 PC', packageVendor(name));
+  }
+  if (isPrebuiltSystem(name) || isSlashBuild(name) || isCompleteSpecSystem(name) || isAiWorkstationSystem(name) ||
+      /品牌電腦|品牌機|套裝電腦|套裝主機|桌上型主機|桌上型電腦|電競電腦|欣亞PC|整機電腦|整機主機/i.test(name)) {
+    return hierarchy('整機電腦', packageVendor(name));
+  }
+  return hierarchy('零件組合', comboType(name));
+}
+
 function detectMonitorSubcategory(name: string): string | null {
   // 1) 明確標示「吋/型/inch」優先
   let size: string | null = null;
@@ -1042,9 +1197,11 @@ function detectMonitorSubcategory(name: string): string | null {
 /**
  * Detect multi-level subcategory from product name.
  * 回傳 `A > B > C` 階層字串；無法判定時回傳 null。
+ * `baseCategory` 僅用於 PACKAGE：標示該筆其實是「帶條件價的零件單品」的原分類。
  */
-export function detectSubcategory(category: ProductCategory, name: string): string | null {
+export function detectSubcategory(category: ProductCategory, name: string, baseCategory?: ProductCategory): string | null {
   switch (category) {
+    case ProductCategory.PACKAGE: return detectPackageSubcategory(name, baseCategory);
     case ProductCategory.CPU: return detectCpuSubcategory(name);
     case ProductCategory.MOTHERBOARD: return detectMotherboardSubcategory(name);
     case ProductCategory.GPU: return detectGpuSubcategory(name);
@@ -1170,6 +1327,17 @@ export function categorizeProduct(product: Product): Product {
 
   if (needsRecategorize) {
     cat = detectCategory(raw);
+  }
+
+  // 條件價單品（搭板價 / 限組裝 / 加購價）不是「可單買的零件淨價」——留在零件分類會讓
+  // 同一顆 CPU 出現多張價格不一的卡。移到 PACKAGE，並以原零件分類作為第二層。
+  // OTHER 例外：本就不入庫，不必為了條件價把雜項救回來。
+  if (condition && cat !== ProductCategory.OTHER) {
+    return withCondition({
+      ...product,
+      category: ProductCategory.PACKAGE,
+      subcategory: detectSubcategory(ProductCategory.PACKAGE, raw, cat) || undefined,
+    }, condition);
   }
 
   const newSubcat = detectSubcategory(cat, raw);

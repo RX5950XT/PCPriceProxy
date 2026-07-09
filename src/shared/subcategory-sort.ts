@@ -1,4 +1,5 @@
 import { ProductCategory } from './types.js';
+import { CATEGORY_META } from './constants.js';
 
 // 主機板側欄：CPU 腳位（第一層）→ 晶片組（第二層，裸名）→ 板廠（第三層）
 const SOCKET_ORDER: readonly string[] = [
@@ -23,6 +24,18 @@ const GPU_SERIES_ORDER: readonly string[] = [
 const HDD_TYPE_ORDER: readonly string[] = ['桌上型硬碟', 'NAS 專用碟', '監控碟', '企業級硬碟', '行動外接硬碟'];
 const NETWORK_ORDER: readonly string[] = ['無線路由器', '網路卡 / 接收器', '交換器', 'NAS 網路儲存', '網路攝影機', '網路線材', '其他網通設備'];
 const FAN_ORDER: readonly string[] = ['12cm 風扇', '14cm 風扇', '8/9cm 小風扇', '其他尺寸風扇'];
+// 整機/組合：完整系統在前，零件搭售次之，條件價單品（非零件淨價）殿後
+const PACKAGE_ORDER: readonly string[] = [
+  '整機電腦', '筆電', '準系統 / 迷你 PC', '掌機', '零件組合', '搭購價單品',
+];
+const COMBO_ORDER: readonly string[] = [
+  '機殼 + 電源', '散熱器 + 電源', '散熱器 + 機殼', 'CPU + 主機板', '主機板 + 記憶體/儲存',
+  '顯卡搭購組', '螢幕 + 周邊', '周邊套裝', '其他組合',
+];
+// 「搭購價單品 > {零件分類}」第二層依側欄主分類順序（CPU → 主機板 → 顯卡…）
+const PACKAGE_BASE_ORDER: readonly string[] = Object.values(CATEGORY_META)
+  .sort((a, b) => a.order - b.order)
+  .map(meta => meta.label);
 
 /** 供 Dashboard 前端腳本注入的排序表（單一真相；client 端 compareNodes 不可自帶清單）。 */
 export const SIDEBAR_ORDERS = {
@@ -33,6 +46,9 @@ export const SIDEBAR_ORDERS = {
   hddType: HDD_TYPE_ORDER,
   network: NETWORK_ORDER,
   fan: FAN_ORDER,
+  packageType: PACKAGE_ORDER,
+  combo: COMBO_ORDER,
+  packageBase: PACKAGE_BASE_ORDER,
 } as const;
 
 const DDR_ORDER: readonly string[] = ['DDR5', 'DDR4', 'D5', 'D4'];
@@ -108,6 +124,7 @@ function semanticRank(category: string, value: string): number {
   if (category === ProductCategory.HDD) return orderedRank(value, HDD_TYPE_ORDER);
   if (category === ProductCategory.NETWORK) return orderedRank(value, NETWORK_ORDER);
   if (category === ProductCategory.FAN) return orderedRank(value, FAN_ORDER);
+  if (category === ProductCategory.PACKAGE) return packageRank(value);
 
   const ddrRank = orderedRank(value, DDR_ORDER);
   if (ddrRank !== Number.MAX_SAFE_INTEGER) return ddrRank;
@@ -133,6 +150,23 @@ function cpuRank(value: string): number {
   if (/CORE I7|ULTRA 7|RYZEN 7/.test(upper)) return 510;
   if (/CORE I5|ULTRA 5|RYZEN 5/.test(upper)) return 520;
   if (/CORE I3|ULTRA 3|RYZEN 3/.test(upper)) return 530;
+  return Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * 整機/組合排序。同時支援樹的「裸節點名」與 flat API 的完整 `A > B > C` 字串：
+ * 完整字串以頂層加權（`p*10000`），裸的第二層節點各自落回自己的序列。
+ */
+function packageRank(value: string): number {
+  const top = orderedRank(value, PACKAGE_ORDER);
+  const combo = orderedRank(value, COMBO_ORDER);
+  const base = orderedRank(value, PACKAGE_BASE_ORDER);
+  if (top !== Number.MAX_SAFE_INTEGER) {
+    return top * 10000 + (combo === Number.MAX_SAFE_INTEGER ? 0 : combo) * 100 +
+      (base === Number.MAX_SAFE_INTEGER ? 0 : base);
+  }
+  if (combo !== Number.MAX_SAFE_INTEGER) return combo * 100;
+  if (base !== Number.MAX_SAFE_INTEGER) return base;
   return Number.MAX_SAFE_INTEGER;
 }
 

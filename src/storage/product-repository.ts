@@ -206,20 +206,24 @@ export class ProductRepository {
     return result.changes;
   }
 
-  /** 刪除非 DIY 商品（OTHER、周邊雜訊、假 PACKAGE 如 VR/筆電搭購列）。 */
+  /**
+   * 刪除非 DIY 商品（OTHER、周邊雜訊、假 PACKAGE 如 VR/筆電搭購列）。
+   * PACKAGE 保留真組合，以及被移出零件分類的條件價單品（搭板價 / 限組裝 / 加購價）。
+   */
   deleteNonDiyProducts(): number {
     const placeholders = DIY_CATEGORIES.map(() => '?').join(', ');
     let removed = this.db.prepare(
       `DELETE FROM products WHERE category NOT IN (${placeholders})`,
     ).run(...DIY_CATEGORIES).changes;
 
-    const fakePackages = this.db.prepare(
-      `SELECT id, raw_name FROM products WHERE category = ?`,
-    ).all(ProductCategory.PACKAGE) as { id: string; raw_name: string }[];
+    const packages = this.db.prepare(
+      `SELECT id, raw_name, specs FROM products WHERE category = ?`,
+    ).all(ProductCategory.PACKAGE) as { id: string; raw_name: string; specs: string }[];
 
     const deleteStmt = this.db.prepare('DELETE FROM products WHERE id = ?');
-    for (const row of fakePackages) {
-      if (!isRealBundle(row.raw_name)) {
+    for (const row of packages) {
+      const hasCondition = Boolean(JSON.parse(row.specs || '{}').priceCondition);
+      if (!isRealBundle(row.raw_name) && !hasCondition) {
         deleteStmt.run(row.id);
         removed++;
       }

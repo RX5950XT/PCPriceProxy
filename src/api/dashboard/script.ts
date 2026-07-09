@@ -201,6 +201,14 @@ export const DASHBOARD_SCRIPT = `
       if (cat === 'hdd') return orderedRank(label, SIDEBAR_ORDERS.hddType);
       if (cat === 'network') return orderedRank(label, SIDEBAR_ORDERS.network);
       if (cat === 'fan') return orderedRank(label, SIDEBAR_ORDERS.fan);
+      if (cat === 'package') {
+        const t = orderedRank(label, SIDEBAR_ORDERS.packageType);
+        if (t !== Number.MAX_SAFE_INTEGER) return t;
+        const c = orderedRank(label, SIDEBAR_ORDERS.combo);
+        if (c !== Number.MAX_SAFE_INTEGER) return 100 + c;
+        const b = orderedRank(label, SIDEBAR_ORDERS.packageBase);
+        return b === Number.MAX_SAFE_INTEGER ? b : 200 + b;
+      }
       return Number.MAX_SAFE_INTEGER;
     };
 

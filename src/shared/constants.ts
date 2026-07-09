@@ -83,9 +83,13 @@ export const KNOWN_BRANDS = [
   'Noctua', 'Arctic', 'DeepCool', 'ID-COOLING', 'Thermalright',
   // 螢幕（GIGABYTE 已列於主機板段，勿在此重複大小寫變體）
   'BenQ', 'ViewSonic', 'DELL', 'LG', 'Acer', 'AOC', 'Philips',
+  // 整機 / 筆電（HP 為 2 字，走詞邊界比對，不會誤中 HyperX）
+  'HP', 'Lenovo', 'VAIO', 'Altos',
   // 周邊（鍵鼠）
   'Logitech', 'Razer', 'SteelSeries', 'HyperX', 'darkFlash',
   'i-Rocks', 'Cherry', 'Keychron', 'Rapoo', 'Havit', 'Turtle Beach', 'EndGame Gear', 'A4Tech', 'Ducky', 'AKKO', 'Pulsar', 'Lamzu', 'Fantech',
+  // AULA 的中文名「狼蛛」不列為別名：Razer Ornata 中文名亦為「雨林狼蛛」，會誤判品牌
+  'AULA',
   // 音訊（耳機 / 喇叭 / 音響）
   'EPOS', 'Edifier', 'Pioneer', 'AIWA', 'ATake', 'Creative', 'Sony', 'JBL', 'Bose', 'Klipsch', 'Audio-Technica', 'Sennheiser', 'Yamaha', 'i.shock',
   // 網通（ASUS 已列於主機板段，不重複）
@@ -170,6 +174,10 @@ export const BRAND_ALIASES: Record<string, string> = {
   '圓剛': 'AverMedia',
   '訊舟': 'Edimax',
   'TOTO-LINK': 'TOTOLINK',
+  // 整機 / 筆電品牌中文名
+  '惠普': 'HP',
+  '聯想': 'Lenovo',
+  '宏碁': 'Acer',
 };
 
 export const USER_AGENTS = [

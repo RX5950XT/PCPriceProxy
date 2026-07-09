@@ -3,8 +3,20 @@
 ## 專案現況
 PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。
 
-## 系統運作狀態（已驗證，2026-07-08）
-資料流：scrape → normalize → categorize → **diy-filter** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **16,023 件商品**、**14,031 張商品卡**、**1,390 組跨店比價**、20 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **22 項檢查全 PASS**。`npm run test` **81 tests**、`npm run build` 通過。dev server 開在 `http://localhost:3000`（`npm run dev`；tsx watch 啟動即爬一次三家）。
+## 系統運作狀態（已驗證，2026-07-09）
+資料流：scrape → normalize → categorize → **diy-filter** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **16,169 件商品**、**1,416 組比價組**、20 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **25 項檢查全 PASS**。`npm run test` **90 tests**、`npm run build` 通過。dev server 開在 `http://localhost:3000`（`npm run dev`；tsx watch 啟動即爬一次三家）。
+
+### 第十六輪重點（條件價單品移出零件分類 + 整機/組合分區）
+- **使用者回饋**：CPU 分類裡 `i5-12400` 出現 8 張價格不一的卡；理論上只該有 `12400` 與 `12400F` 兩樣，其餘搭板/組裝價要移到「整機組合」；並要求把「整機/組合」分區。
+- **根因（兩層）**：
+  1. 第五輪的「條件價單品仍歸真分類、只排除跨店比價」在列表視角是錯的——6 張卡都帶 `priceCondition`（組裝價/搭板價/限組裝），它們是買主機板才有的價格，不是零件淨價。
+  2. PACKAGE 本身也髒：autobuy 的 11 筆全是**假加號誤判**（`NITRO+ … 顯示卡`、`FK1+-B 電競滑鼠`、`M.2+ WIFI … 主機板`、`低藍光+不閃屏 IPS螢幕`、`Arctis Pro + GameDAC 耳機`），另有 `mini PCIE`→`MINI PC`、`DS225+【2Bay】`、機殼「內含 850W 電源」等。
+- **診斷法**：把 `isRealBundle` 拆出 `bundleReason()` 回傳規則名（laptop / plus-part / case-plus-psu…），對全庫 PACKAGE 跑規則命中分布，直接定位是哪條規則誤判。
+- **A+B 判定改用品牌 guard**：真組合一律寫「商品A + **品牌** 商品B」，假加號後接規格詞。`plusFollowedByBrand()` 對每個加號取後 28 字（跳過 `【…】`）餵 `extractBrand`。配套 `neutralizeFakePlus` 補「電源相位」與連鎖加號 `18+3+3`；新增 `isBuiltInPsu`（`內含 850W` 緊接瓦數才算，`內附顯卡支撐架` 不誤殺）、`isNasAppliance`、`isCableAccessory`。
+- **雙向檢查抓到的回歸**（都已修）：`螢幕支架組`/`優惠組合` 9+1 筆真組合被誤殺 → 補 bundle-keyword；Snapdragon 筆電落 RAM → `isLaptop` 去掉 CPU 型號必要條件；`1TB含散熱片` SSD 落 OTHER → `isSsdContaminated` 散熱片改條件式（無讀寫/TLC 才算配件）；`NCORE 100 機殼(內含SFX 850W)` 落 PSU → `looksLikePsu` 排除；`不含風扇` 的盒裝 CPU 落 FAN → `isFanContaminated` 擋。
+- **條件價單品 → PACKAGE**：`搭購價單品 > {原零件分類} > {條件}`。**三處連動**：`diy-filter.isDiyProduct`、`ProductRepository.deleteNonDiyProducts()`（它自己用 `isRealBundle` 判，漏改會把 409 筆直接刪光，且刪掉只能重爬）、`matcher`（本就排除）。
+- **PACKAGE 六大分區**（2,069 筆，無子分類節點 = 0）：筆電 826 / 零件組合 490 / 整機電腦 347 / 搭購價單品 296 / 準系統・迷你 PC 106 / 掌機 9。整機品牌走 `systemBrand`（**只掃品名開頭 4 token**，避免抓到規格裡的零件品牌）＋ `PACKAGE_VENDORS`（酷!PC / 欣亞PC / 欣亞精選主機 / 捷元 / DeskMini→ASRock）；`comboType` 依搭配類型分 9 種，電源訊號含 `looksLikePsuModel`（`SX850P`/`A1000GS` 瓦數藏在字母後綴）。
+- **驗證**：`npm run test` **90 tests**（+9）、`npm run build`、重爬三家、`clean-and-rebuild`、`npm run audit` **25 項全 PASS**（新增 `PACKAGE without subcategory`、`Price-condition leak in part categories`、`CPU duplicate model cards`，並把 `Package false positive` 改為容許條件價）。live API：`?category=cpu&q=12400` → `total=2`（`i5-12400` sinya $6,100 + autobuy $5,600 兩店卡；`i5-12400F` sinya $5,100）。
 
 ### 第十五輪重點（全類別稽核除污 + PSU/RAM 結構 + 機殼/周邊品牌分類）
 - **使用者回饋**：逐類別檢查是否真爬到且正確分類、疑似「無中生有」；記憶體是否還有伺服器類、電源要分 SFX 尺寸、機殼依品牌再依系列、鍵鼠/耳機/喇叭/網通依品牌分類。

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categorizeProduct, gpuMatchKey, isRealBundle } from './categorizer.js';
+import { bundleReason, categorizeProduct, gpuMatchKey, isRealBundle } from './categorizer.js';
 import { ProductCategory } from '../shared/types.js';
 import type { Product } from '../shared/types.js';
 
@@ -41,20 +41,27 @@ describe('categorizeProduct 分類順序', () => {
     expect(categorizeProduct(makeProduct(rawName, ProductCategory.GPU)).category).toBe(ProductCategory.GPU);
   });
 
-  it('任搭 CPU 活動中的主機板要歸主機板，不留在 CPU', () => {
+  // 任搭 CPU 是主機板的搭板價 → 不留在 CPU，也不是零件淨價，歸「搭購價單品 > 主機板」
+  it('任搭 CPU 活動中的主機板不留在 CPU，改列搭板價主機板', () => {
     const rawName = '[任搭CPU活動] 華碩 PRIME B840M-A-CSM(M-ATX/註冊四年保)8+2+1相供電, $2990 ★';
     const categorized = categorizeProduct(makeProduct(rawName, ProductCategory.CPU));
 
-    expect(categorized.category).toBe(ProductCategory.MOTHERBOARD);
-    expect(categorized.subcategory).toBe('AMD AM5 > B840 > ASUS');
+    expect(categorized.category).toBe(ProductCategory.PACKAGE);
+    expect(categorized.subcategory).toBe('搭購價單品 > 主機板 > 搭板價');
+    expect(categorized.specs.priceCondition).toBe('搭板價');
   });
 
-  it('mATX 標記的任搭 CPU 主機板也要重判為主機板', () => {
+  it('mATX 標記的任搭 CPU 主機板也要重判為主機板（搭板價）', () => {
     const rawName = '【任搭CPU】華碩 B650M-AYW WIFI(mATX/1H/Realtek 2.5Gb/註冊五年保)';
     const categorized = categorizeProduct(makeProduct(rawName, ProductCategory.CPU));
 
-    expect(categorized.category).toBe(ProductCategory.MOTHERBOARD);
-    expect(categorized.subcategory).toBe('AMD AM5 > B650 > ASUS');
+    expect(categorized.subcategory).toBe('搭購價單品 > 主機板 > 搭板價');
+  });
+
+  it('無條件價的主機板仍歸主機板（不因重判被吸進 PACKAGE）', () => {
+    const clean = categorizeProduct(makeProduct('華碩 PRIME B840M-A-CSM(M-ATX/註冊四年保)8+2+1相供電', ProductCategory.CPU));
+    expect(clean.category).toBe(ProductCategory.MOTHERBOARD);
+    expect(clean.subcategory).toBe('AMD AM5 > B840 > ASUS');
   });
 
   it('U 版專案 CPU + 主機板是真組合', () => {
@@ -270,14 +277,18 @@ describe('第十三輪：HDD/FAN/NETWORK 污染與子分類修正', () => {
   it('HDD 監控碟獨立子分類；桌上型不再與監控混名', () => {
     const sky = categorizeProduct(makeProduct('【監控鷹AI】Seagate 10TB (ST10000VE001) 256M/7200轉/五年保固/三年資料救援', ProductCategory.HDD));
     expect(sky.subcategory).toMatch(/^監控碟 > /);
-    const desktop = categorizeProduct(makeProduct('Seagate 1TB【新梭魚】(256M/7200轉/3年保) (ST1000DM014)【限組裝】', ProductCategory.HDD));
+    const desktop = categorizeProduct(makeProduct('Seagate 1TB【新梭魚】(256M/7200轉/3年保) (ST1000DM014)', ProductCategory.HDD));
     expect(desktop.subcategory).toMatch(/^桌上型硬碟 > /);
+    // 限組裝的同一顆碟不是零件淨價，移到搭購價單品
+    const bundled = categorizeProduct(makeProduct('Seagate 1TB【新梭魚】(256M/7200轉/3年保) (ST1000DM014)【限組裝】', ProductCategory.HDD));
+    expect(bundled.subcategory).toBe('搭購價單品 > 傳統硬碟 HDD > 限組裝');
   });
 
-  it('加購優惠是條件價單品，不是組合', () => {
+  it('加購優惠是條件價單品，不是組合（仍記錄原零件分類）', () => {
     const raw = '【加購優惠】買 ASUS NUC DDR5系列準系統 加購 美光 NB 16G D5-5600 (一台限購1)';
     const out = categorizeProduct(makeProduct(raw, ProductCategory.RAM));
-    expect(out.category).toBe(ProductCategory.RAM);
+    expect(isRealBundle(raw)).toBe(false);
+    expect(out.subcategory).toBe('搭購價單品 > 記憶體 > 加購價');
     expect(out.specs?.priceCondition).toBe('加購價');
   });
 
@@ -355,5 +366,75 @@ describe('第十五輪：除污與品牌分類', () => {
     expect(kb.subcategory).toBe('Keychron > 機械式鍵盤');
     const spk = categorizeProduct(makeProduct('漫步者Edifier R2750DB 三音路喇叭 /Bluetooth V4.', ProductCategory.SPEAKER));
     expect(spk.subcategory).toBe('Edifier > 藍牙 / 無線喇叭');
+  });
+
+  it('條件價單品移出零件分類，歸「整機/組合 > 搭購價單品 > 原分類 > 條件」', () => {
+    const assembled = categorizeProduct(makeProduct('【組裝價】Intel Core i5-12400F【6核12緒】(2.5GHz(Turbo 4.4GHz)/快取18M/無內顯/65W)【代理公司貨】', ProductCategory.CPU));
+    expect(assembled.category).toBe(ProductCategory.PACKAGE);
+    expect(assembled.subcategory).toBe('搭購價單品 > CPU 處理器 > 組裝價');
+
+    const boardPrice = categorizeProduct(makeProduct('【搭板】Intel 第12代 Core i5-12400 6核12緒 處理器《2.5Ghz/LGA1700》(代理商貨)☆5500元', ProductCategory.CPU));
+    expect(boardPrice.subcategory).toBe('搭購價單品 > CPU 處理器 > 搭板價');
+
+    // 乾淨單品仍留在 CPU
+    const clean = categorizeProduct(makeProduct('Intel Core i5-12400F【6核12緒】(2.5GHz(Turbo 4.4GHz)/快取18M/無內顯/65W)【代理公司貨】', ProductCategory.CPU));
+    expect(clean.category).toBe(ProductCategory.CPU);
+    expect(clean.specs.priceCondition).toBeUndefined();
+  });
+
+  it('CPU 盒裝的「不含風扇」不可被判成系統風扇', () => {
+    const cpu = categorizeProduct(makeProduct('【搭板】Intel Core Ultra 9 285K 24核24緒 另加NPU 的 AI 處理器(Core Ultra 200S)《3.7Ghz/LGA1851/不含風扇》(代理商貨)☆18200元', ProductCategory.PACKAGE));
+    expect(cpu.subcategory).toBe('搭購價單品 > CPU 處理器 > 搭板價');
+  });
+
+  it('假加號：加號後不是品牌就不是組合（型號 / 規格 / 介面加號）', () => {
+    expect(bundleReason('SAPPHIRE 藍寶石 NITRO+ 氮動 RX 9070 XT GAMING OC 16GB 顯示卡(3+2年保)☆28990元')).toBeNull();
+    expect(bundleReason('ZOWIE FK1+-B 電競滑鼠《黑》☆2290元')).toBeNull();
+    expect(bundleReason('ASRock 華擎 B650M-H/M.2+ WIFI AM5主機板(MATX/3+1年保)☆2990元')).toBeNull();
+    expect(bundleReason('BenQ 明基 GW2791 27型 低藍光+不閃屏 IPS螢幕☆2888元')).toBeNull();
+    expect(bundleReason('華擎 TRX50 WS(E-ATX/Marvell 10Gb+LAN 2.5Gb+無線/註五年)18+3+3 電源相位')).toBeNull();
+    expect(bundleReason('Synology DS225+【2Bay】Intel J4125 四核心 2.0G/2GB DDR4/1Gb*1/2.5Gb*1')).toBeNull();
+    expect(bundleReason('INTEL N6235 mini PCIE介面 無線網路模組☆900元')).toBeNull();
+    // 真組合必須保留
+    expect(bundleReason('視博通 蒼龍戰士 + 視博通 450W電源(2年) 顯卡長30/CPU高15/ATX')).toBe('plus-part');
+    expect(bundleReason('華碩 Prime AP201 黑 /方形進氣孔/M-ATX + 華碩 PRIME 550W 銅牌/直出線/6年保')).toBe('plus-psu-rated');
+    expect(bundleReason('【U版專案】Intel Core i5-12400+華碩 PRIME B760M-F D4-CSM')).toBe('plus-cpu-chipset');
+    expect(bundleReason('【優惠組合】技嘉 AORUS WATERFORCE II 360 鷹魂二代 + EPONTEC T300 玻璃透側機殼')).toBe('bundle-keyword');
+  });
+
+  it('機殼「內含 850W 電源」是本體規格，不是電源也不是組合', () => {
+    const nc = categorizeProduct(makeProduct('Cooler Master 酷碼【NCORE 100 MAX】ITX電腦機殼《古銅》(內含SFX 850W+120mm水冷)☆12500元', ProductCategory.PACKAGE));
+    expect(nc.category).toBe(ProductCategory.CASE);
+    // 「內附顯卡支撐架」的機殼 + 電源仍是真組合
+    expect(isRealBundle('【促銷】聯力 V100R 白 全景玻璃機殼 (ATX/內附顯卡支撐架/顯卡415mm)+EPONTEC MARS 750W (80+金牌/全模組)')).toBe(true);
+  });
+
+  it('SSD「1TB 含散熱片」是本體規格；純散熱片配件仍排除', () => {
+    const ssd = categorizeProduct(makeProduct('三星 Samsung 9100 PRO 1TB含散熱片/PCIe 5.0 x4/讀14700/寫13300/TLC【五年保】~限整機~', ProductCategory.SSD));
+    expect(ssd.subcategory).toBe('搭購價單品 > 固態硬碟 SSD > 限組裝');
+  });
+
+  it('整機/筆電品牌取品名開頭，不抓規格裡的零件品牌', () => {
+    const omen = categorizeProduct(makeProduct('HP HyperX OMEN i7-14650HX/RTX5060/16G/1T/15吋 究極黑 15-ga0008TX 筆電', ProductCategory.PACKAGE));
+    expect(omen.subcategory).toBe('筆電 > HP');
+    const pn = categorizeProduct(makeProduct('ASUS【PN43-100UMZA】Intel N100 / 8G / 128G / WIN 11 Pro', ProductCategory.PACKAGE));
+    expect(pn.subcategory).toBe('整機電腦 > ASUS');
+    const coolpc = categorizeProduct(makeProduct('酷！PC【黑熊】 I5-12400/H610/16G DDR5/512G SSD/原廠機殼/650W原廠電供', ProductCategory.PACKAGE));
+    expect(coolpc.subcategory).toBe('整機電腦 > 原價屋 酷!PC');
+  });
+
+  it('Snapdragon 筆電（無 x86 CPU 型號）仍判為筆電，不落記憶體', () => {
+    const zen = categorizeProduct(makeProduct('ASUS Zenbook A14 UX3407QA-0112G26100 冰岩灰 華碩時尚極致纖薄筆電/Snapdragon X X1 26 100/16GB LPDDR5X/512GB PCIe/14吋 16:10', ProductCategory.RAM));
+    expect(zen.category).toBe(ProductCategory.PACKAGE);
+    expect(zen.subcategory).toBe('筆電 > ASUS');
+  });
+
+  it('零件組合依搭配類型分區', () => {
+    const casePsu = categorizeProduct(makeProduct('華碩 Prime AP201 黑 /方形進氣孔/M-ATX + 華碩 PRIME 550W 銅牌/直出線/6年保', ProductCategory.PACKAGE));
+    expect(casePsu.subcategory).toBe('零件組合 > 機殼 + 電源');
+    const coolerCase = categorizeProduct(makeProduct('【優惠促銷】技嘉 AORUS WATERFORCE II 360 鷹魂二代 + Antec 安鈦克 P30 AIR 玻璃透側機殼', ProductCategory.PACKAGE));
+    expect(coolerCase.subcategory).toBe('零件組合 > 散熱器 + 機殼');
+    const mbRam = categorizeProduct(makeProduct('【重磅價】華碩 PRIME B760M-F D4-CSM+威剛 ADATA DDR4-3200 16G+十銓 TEAM MP33 512GB', ProductCategory.PACKAGE));
+    expect(mbRam.subcategory).toBe('零件組合 > 主機板 + 記憶體/儲存');
   });
 });
