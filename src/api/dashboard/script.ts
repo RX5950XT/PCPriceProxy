@@ -302,12 +302,13 @@ export const DASHBOARD_SCRIPT = `
               const selfLeaf = node.count > 0
                 ? '<div class="tree-sub-node" data-sub="' + escHtml(node.fullPath) + '"><span>全部 ' + escHtml(node.name) + '</span><span style="font-size:0.7rem;opacity:0.6;">(' + node.count + ')</span></div>'
                 : '';
+              // 內層分支預設展開：整棵子分類樹一次可見，不用逐層點到底
               html += '<div class="tree-branch-inner">' +
-                      '  <div class="tree-node-parent-inner">' +
+                      '  <div class="tree-node-parent-inner expanded">' +
                       '    <span>' + escHtml(node.name) + '</span>' +
                       '    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>' +
                       '  </div>' +
-                      '  <div class="tree-node-children-inner" style="display:none;">' +
+                      '  <div class="tree-node-children-inner" style="display:flex;">' +
                       selfLeaf + renderTreeHtml(node.children, false) +
                       '  </div>' +
                       '</div>';
