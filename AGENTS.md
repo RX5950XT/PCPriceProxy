@@ -1,4 +1,4 @@
-# CLAUDE.md - 專案通用規範
+# AGENTS.md - 專案通用規範
 
 ## 開發指令
 - 啟動開發伺服器：`npm run dev`
@@ -7,6 +7,7 @@
 - 執行測試爬取：`npm run scrape:test`
 - 管線稽核：`npm run audit`
 - 清洗 DB 並重建比價組：`npx tsx src/scripts/clean-and-rebuild.ts`
+- 容器部署：`docker compose up -d --build`（掛 `./data` volume 持久化 SQLite，Dockerfile 已代複製 `schema.sql`）
 
 ## 程式碼規範
 - 一律使用 **TypeScript**，遵循嚴格模式（strict: true）。
