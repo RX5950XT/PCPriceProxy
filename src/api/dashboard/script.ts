@@ -364,59 +364,8 @@ export const DASHBOARD_SCRIPT = `
     }
   }
 
-  // ── Load Brands ──
-  async function loadBrands() {
-    const brandWrap = document.getElementById('brand-wrap');
-    const brandContainer = document.getElementById('brand-chips');
-    if (!category) { brandWrap.style.display = 'none'; brandContainer.innerHTML = ''; return; }
-
-    try {
-      const url = '/api/v1/categories/' + category + '/brands' + (subcategory ? '?subcategory=' + encodeURIComponent(subcategory) : '');
-      const response = await fetch(url);
-      const data = await response.json();
-      if (data.success && data.data.length > 0) {
-        brandWrap.style.display = 'block';
-        let isBrandStillAvailable = false;
-        let html = '<div class="brand-chip' + (!brand ? ' active' : '') + '" data-brand="">全部品牌</div>';
-        data.data.forEach(item => {
-          const isActive = brand === item.brand;
-          if (isActive) isBrandStillAvailable = true;
-          html += '<div class="brand-chip' + (isActive ? ' active' : '') + '" data-brand="' + escHtml(item.brand) + '">' + escHtml(item.brand) + ' (' + item.count + ')</div>';
-        });
-        if (!isBrandStillAvailable && brand) {
-          brand = '';
-          if (!subcategory && !brand) { sort = 'updated'; document.getElementById('sort-select').value = 'updated'; }
-        }
-        brandContainer.innerHTML = html;
-        brandContainer.querySelectorAll('.brand-chip').forEach(bc => {
-          bc.addEventListener('click', () => {
-            brandContainer.querySelectorAll('.brand-chip').forEach(x => x.classList.remove('active'));
-            bc.classList.add('active');
-            brand = bc.dataset.brand;
-            page = 1;
-            if (subcategory || brand) {
-              sort = 'price_asc';
-              document.getElementById('sort-select').value = 'price_asc';
-            } else {
-              sort = 'updated';
-              document.getElementById('sort-select').value = 'updated';
-            }
-            fetchProducts();
-          });
-        });
-      } else {
-        brandWrap.style.display = 'none';
-        brandContainer.innerHTML = '';
-        if (brand) {
-          brand = '';
-          if (!subcategory && !brand) { sort = 'updated'; document.getElementById('sort-select').value = 'updated'; }
-        }
-      }
-    } catch (e) {
-      brandWrap.style.display = 'none';
-      brandContainer.innerHTML = '';
-    }
-  }
+  // ── Load Brands（品牌篩選欄位已移除，保留 no-op 以相容既有呼叫點） ──
+  async function loadBrands() { /* 品牌篩選欄位已移除 */ }
 
   // ── Search / Sort ──
   function onSearchInput() {
@@ -445,17 +394,11 @@ export const DASHBOARD_SCRIPT = `
       const j = await r.json();
       if (!j.success) return;
       let total = 0, latestTime = null;
-      const dots = document.getElementById('source-dots');
       j.data.forEach(s => {
         total += s.productCount;
         if (s.lastScrapedAt) {
           const t = new Date(s.lastScrapedAt.includes('T') ? s.lastScrapedAt : s.lastScrapedAt.replace(' ', 'T') + 'Z');
           if (!latestTime || t > latestTime) latestTime = t;
-        }
-        const dot = dots.querySelector('.dot-' + s.source);
-        if (dot) {
-          dot.className = 'dot dot-' + s.source + (s.status === 'healthy' ? ' healthy' : '');
-          dot.title = SOURCE_NAMES[s.source] + '：' + s.productCount.toLocaleString() + ' 件 (' + s.status + ')';
         }
       });
       document.getElementById('stat-total').textContent = total.toLocaleString() + ' 件';
@@ -521,11 +464,14 @@ export const DASHBOARD_SCRIPT = `
       const autobuy = bySource['autobuy'];
 
       const renderPrice = (prod, sourceKey) => {
-        if (!prod) return '<div class="store-price-empty">—</div>';
-        const isLowest = prod.price === g.lowestPrice && g.products.length > 1;
+        if (!prod) return '<div class="store-price-empty">――</div>';
+        const spread = g.highestPrice !== g.lowestPrice && g.products.length > 1;
+        const isLowest = g.products.length > 1 && prod.price === g.lowestPrice;
+        const isHighest = spread && !isLowest && prod.price === g.highestPrice;
+        const mark = isLowest ? ' is-lowest' : (isHighest ? ' is-highest' : '');
         return '<a href="' + escHtml(prod.sourceUrl) + '" target="_blank" rel="noopener" ' +
-               'class="store-price-link store-' + sourceKey + (isLowest ? ' is-lowest' : '') + '">' +
-               (isLowest ? '<span class="lowest-badge">最低價</span>' : '') +
+               'class="store-price-link store-' + sourceKey + mark + '">' +
+               (isLowest ? '<span class="lowest-badge">最低</span>' : '') +
                '<span class="store-name-mini">' + SOURCE_NAMES[sourceKey] + '</span>' +
                '<span class="store-val">$' + prod.price.toLocaleString() + '</span>' +
                '</a>';

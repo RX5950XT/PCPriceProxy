@@ -15,7 +15,7 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
   <meta name="description" content="即時彙整原價屋、欣亞、Autobuy 三大通路電腦零件報價，跨店整合比對與分類排序。">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+TC:wght@300;400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>${DASHBOARD_STYLES}</style>
 </head>
 <body>
@@ -34,14 +34,6 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
       <div class="stat">
         <span class="stat-label">商品總量</span>
         <span class="stat-value" id="stat-total">—</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">通路狀態</span>
-        <div class="source-dots" id="source-dots">
-          <span class="source-dot-item"><span class="dot dot-coolpc" title="原價屋"></span>原價屋</span>
-          <span class="source-dot-item"><span class="dot dot-sinya" title="欣亞"></span>欣亞</span>
-          <span class="source-dot-item"><span class="dot dot-autobuy" title="Autobuy"></span>Autobuy</span>
-        </div>
       </div>
       <div class="stat">
         <span class="stat-label">最後更新</span>
@@ -98,11 +90,6 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
         <option value="price_desc">價格高→低</option>
         <option value="name">名稱排序</option>
       </select>
-    </div>
-
-    <div class="brand-wrap" id="brand-wrap" style="display:none;">
-      <div class="brand-title">品牌篩選</div>
-      <div class="sub-chips" id="brand-chips"></div>
     </div>
 
     <div class="results-header">
