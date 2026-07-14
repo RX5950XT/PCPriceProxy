@@ -539,3 +539,112 @@ describe('第十七輪：線材獨立分類、OS/軟體合併、光碟機移除'
     expect(categorizeProduct(legacy).category).toBe(ProductCategory.OS);
   });
 });
+
+describe('第十八輪：側欄分類精度與節點收斂', () => {
+  it('GPU 來源混入的系統風扇與電源要重判到正確分類', () => {
+    const reverseFan = 'MONTECH 君主 RX120 PRO 黑色 反向扇葉 ARGB 1600轉 來福軸承靜音風扇';
+    const pwmFan = 'Scythe Grand Tornado 120 龍風丸 3000/LCP塑料/PWM/SPFDB2軸承(GT1225FD30-P)';
+    const psu = '曜越 Toughpower GT 850W (80+金牌/ATX3.1/PCIe 5.1/全模組/十年保固)';
+
+    expect(categorizeProduct(makeProduct(reverseFan, ProductCategory.GPU)).category).toBe(ProductCategory.FAN);
+    expect(categorizeProduct(makeProduct(pwmFan, ProductCategory.GPU)).category).toBe(ProductCategory.FAN);
+    expect(categorizeProduct(makeProduct(psu, ProductCategory.GPU)).category).toBe(ProductCategory.PSU);
+  });
+
+  it('主機板來源的機內延長線歸 CABLE，PCIe USB 擴充卡落 OTHER', () => {
+    const extension = 'JONSBO 喬思伯 DY2 雙面發光線 主機板 24PIN ARGB延長線';
+    const addInCard = '銀欣 ECU02-E【PCI-E 4X】主板20Pin Type-C / USB10G (ASM 3142)';
+
+    const cable = categorizeProduct(makeProduct(extension, ProductCategory.MOTHERBOARD));
+    expect(cable.category).toBe(ProductCategory.CABLE);
+    expect(cable.subcategory).toBe('機內排線 / 延長線');
+    expect(categorizeProduct(makeProduct(addInCard, ProductCategory.MOTHERBOARD)).category).toBe(ProductCategory.OTHER);
+  });
+
+  it('螢幕來源的掛燈、支架、小型機殼 LCD 不可污染螢幕側欄', () => {
+    const light = 'BenQ ScreenBar Halo2 螢幕智能掛燈(無線旋鈕版)';
+    const arm = 'BenQ ERGO ARM BSH01 黑色 (單螢幕/穿夾兩用/承載20KG)';
+    const lcd = 'LIAN LI 聯力 8.8吋 IPS LCD 萬用螢幕《黑》(US88v1)';
+
+    for (const raw of [light, arm, lcd]) {
+      expect(categorizeProduct(makeProduct(raw, ProductCategory.MONITOR)).category).toBe(ProductCategory.OTHER);
+    }
+  });
+
+  it('無明寫吋數的螢幕型號仍能抽出尺寸，VGA 公對公線則歸 CABLE', () => {
+    const monitor = categorizeProduct(makeProduct('MSI MAG 272F〈1H1P/IPS/200Hz〉', ProductCategory.MONITOR));
+    const cable = categorizeProduct(makeProduct('廣鐸ktnet VGA公對公 螢幕專用線-1.5M/Y15F15F1.5BLCU', ProductCategory.MONITOR));
+
+    expect(monitor.subcategory).toBe('27吋');
+    expect(cable.category).toBe(ProductCategory.CABLE);
+    expect(cable.subcategory).toBe('影音線');
+  });
+
+  it('空冷高度正規化為裝機有意義的區間，不產生 15.xmm 碎片節點', () => {
+    const compact = categorizeProduct(makeProduct('ID-COOLING IS-55 下吹式散熱器 高55mm 無光', ProductCategory.COOLER));
+    const standard = categorizeProduct(makeProduct('JONSBO CR1000 V2 Pro ARGB 單塔 CPU散熱器(高15.7)', ProductCategory.COOLER));
+    const tall = categorizeProduct(makeProduct('Noctua NH-D15 雙塔散熱器 高165mm', ProductCategory.COOLER));
+
+    expect(compact.subcategory).toBe('下吹式空冷 > 100mm 以下（低矮型） > 無光');
+    expect(standard.subcategory).toBe('單塔空冷 > 151–160mm > ARGB');
+    expect(tall.subcategory).toBe('雙塔空冷 > 161mm 以上 > 無光');
+  });
+
+  it('舊顯卡與工作站/舊主機板要有穩定的系列與腳位路徑', () => {
+    const n730 = categorizeProduct(makeProduct('MSI 微星 N730-2GD3V3 DDR3 2G 顯示卡', ProductCategory.GPU));
+    const r7240 = categorizeProduct(makeProduct('撼訊 AXR7 240 2GBD5-HLEV2 顯示卡', ProductCategory.GPU));
+    const w880 = categorizeProduct(makeProduct('華碩 PRO WS W880-ACE SE(ATX/雙Intel 2.5Gb)', ProductCategory.MOTHERBOARD));
+    const wrx80 = categorizeProduct(makeProduct('華碩 PRO WS WRX80E-SAGE SE WIFI II(EEB/8DIMM)', ProductCategory.MOTHERBOARD));
+    const h310 = categorizeProduct(makeProduct('華碩 PRIME H310M-K LGA1151主機板', ProductCategory.MOTHERBOARD));
+
+    expect(n730.subcategory).toBe('NVIDIA GT 700系列 > GT 730 > 2G > MSI');
+    expect(r7240.subcategory).toBe('AMD Radeon R7 系列 > Radeon R7 240 > PowerColor');
+    expect(w880.subcategory).toBe('Intel LGA1851 > W880 > ASUS');
+    expect(wrx80.subcategory).toBe('AMD sWRX8 > WRX80 > ASUS');
+    expect(h310.subcategory).toBe('Intel LGA1151 > H310 > ASUS');
+  });
+
+  it('機殼品牌別名能形成品牌頂層，不再落入未分類平列', () => {
+    const apex = categorizeProduct(makeProduct('Apexgaming 艾湃 ZENITH TA100 玻璃透側 ATX機殼', ProductCategory.CASE));
+    const mavoly = categorizeProduct(makeProduct('Mavoly 松聖 甘蔗 ATX電腦機殼', ProductCategory.CASE));
+    const enermax = categorizeProduct(makeProduct('保銳 ENERPAZO EP237 白 玻璃側板 ATX機殼', ProductCategory.CASE));
+
+    expect(apex.subcategory).toBe('Apexgaming');
+    expect(mavoly.subcategory).toBe('Mavoly');
+    expect(enermax.subcategory).toBe('Enermax');
+  });
+
+  it('通路常見的數字開頭螢幕型號能抽出尺寸', () => {
+    const aopen = categorizeProduct(makeProduct('AOPEN 22SA2Q H〈1A1H/VA/100Hz〉', ProductCategory.MONITOR));
+    const terra = categorizeProduct(makeProduct('terra 2441W〈1A1H/IPS/含喇叭/144Hz〉', ProductCategory.MONITOR));
+
+    expect(aopen.subcategory).toBe('22吋');
+    expect(terra.subcategory).toBe('24吋');
+  });
+
+  it('沒有螢幕關鍵字的掛燈促銷列與磁吸 LCD 配件也要移除', () => {
+    const light = 'PHILIPS PAS351〈舒視光/手勢感應開關燈/AA級均勻照明/55cm超廣燈體〉';
+    const promo = '↪ Raymii 滿 $1,000： 贈 D100 鋁合金旋轉支架 (市價 $349 / 限量 300 組)。';
+    const lcd = 'Thermalright 利民 Trofeo Vision LCD磁吸數位螢幕《白》';
+
+    for (const raw of [light, promo, lcd]) {
+      expect(categorizeProduct(makeProduct(raw, ProductCategory.MONITOR)).category).toBe(ProductCategory.OTHER);
+    }
+  });
+
+  it('Arduino Galileo/Edison 開發板不是 PC 主機板或 CPU', () => {
+    const galileo = 'Intel Galileo2 內建CPU 主機板';
+    const edison = 'Intel Edison Kit for Arduino 內建 CPU 主機板';
+
+    expect(categorizeProduct(makeProduct(galileo, ProductCategory.MOTHERBOARD)).category).toBe(ProductCategory.OTHER);
+    expect(categorizeProduct(makeProduct(edison, ProductCategory.MOTHERBOARD)).category).toBe(ProductCategory.OTHER);
+  });
+
+  it('1st Player 與電鎧機殼有可篩選的品牌頂層', () => {
+    const firstPlayer = categorizeProduct(makeProduct('1st Player SP7 黑 玻璃透側 ATX機殼', ProductCategory.CASE));
+    const darkArmor = categorizeProduct(makeProduct('電鎧 DK104 A.RGB 玻璃透側 E-ATX電腦機殼', ProductCategory.CASE));
+
+    expect(firstPlayer.subcategory).toBe('1st Player');
+    expect(darkArmor.subcategory).toBe('電鎧');
+  });
+});

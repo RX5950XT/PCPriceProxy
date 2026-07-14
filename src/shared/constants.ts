@@ -80,7 +80,10 @@ export const KNOWN_BRANDS = [
   // 電源 / 機殼 / 散熱（XPG 為 ADATA 電競線，機殼以 XPG 名義販售，獨立顯示較易辨識）
   'Seasonic', 'FSP', 'Cooler Master', 'NZXT', 'be quiet!', 'Thermaltake', 'Antec', 'SilverStone', 'Montech', 'In Win',
   'Lian Li', 'Fractal Design', 'Phanteks', 'JONSBO', 'TRYX', 'XPG', '視博通', 'Power Master', '幾何未來',
-  'Cougar', 'HYTE', 'SAMA', 'Super Flower', '旋剛', 'SADES', 'XIGMATEK', 'YAMA',
+  'Cougar', 'HYTE', 'SAMA', 'Super Flower', '旋剛', 'SADES', 'XIGMATEK', 'YAMA', 'Enermax',
+  // 台灣通路常見機殼品牌（沒有穩定系列時至少形成可篩選的品牌頂層）
+  'Apexgaming', 'TrendSonic', 'Infotec', 'Mavoly', 'i-COOLTW', 'TREETOP', 'ALL-IN', 'ZALMAN',
+  'Ripple', 'BitFenix', 'EPONTEC', 'GAMEMAX', 'INFINITE', '1st Player', '電鎧',
   'Noctua', 'Arctic', 'DeepCool', 'ID-COOLING', 'Thermalright',
   // 螢幕（GIGABYTE 已列於主機板段，勿在此重複大小寫變體）
   'BenQ', 'ViewSonic', 'DELL', 'LG', 'Acer', 'AOC', 'Philips',
@@ -157,6 +160,13 @@ export const BRAND_ALIASES: Record<string, string> = {
   '先馬': 'SAMA',
   '賽德斯': 'SADES',
   '雅瑪': 'YAMA',
+  '保銳': 'Enermax',
+  '艾湃': 'Apexgaming',
+  '翰欣': 'TrendSonic',
+  '英富達': 'Infotec',
+  '松聖': 'Mavoly',
+  '樹昌': 'TREETOP',
+  '火鳥': 'BitFenix',
   // 鍵鼠品牌別名
   '櫻桃': 'Cherry',
   '雷柏': 'Rapoo',

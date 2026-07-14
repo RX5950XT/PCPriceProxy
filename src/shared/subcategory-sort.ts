@@ -3,11 +3,12 @@ import { CATEGORY_META } from './constants.js';
 
 // 主機板側欄：CPU 腳位（第一層）→ 晶片組（第二層，裸名）→ 板廠（第三層）
 const SOCKET_ORDER: readonly string[] = [
-  'Intel LGA1851', 'Intel LGA1700', 'Intel LGA4677', 'AMD AM5', 'AMD AM4', 'AMD sTR5',
+  'Intel LGA1851', 'Intel LGA1700', 'Intel LGA1200', 'Intel LGA1151', 'Intel LGA1150', 'Intel LGA4677',
+  'AMD AM5', 'AMD AM4', 'AMD sTR5', 'AMD sWRX8',
 ];
 const CHIPSET_ORDER: readonly string[] = [
-  'Z890', 'W890', 'B860', 'H810', 'Z790', 'B760', 'H610', 'W680', 'B660', 'W790',
-  'X870E', 'X870', 'WRX90', 'TRX50', 'B850', 'B840', 'X670E', 'X670', 'B650E', 'B650', 'A620', 'B550', 'A520',
+  'Z890', 'W890', 'W880', 'B860', 'H810', 'Z790', 'B760', 'H610', 'W680', 'B660', 'H510', 'H310', 'H110', 'H81', 'W790',
+  'X870E', 'X870', 'WRX90', 'TRX50', 'WRX80', 'B850', 'B840', 'X670E', 'X670', 'B650E', 'B650', 'A620', 'B550', 'A520',
 ];
 // 板卡/主機板品牌慣用順序（其餘品牌落 locale 排序）
 const VENDOR_ORDER: readonly string[] = [
@@ -16,8 +17,8 @@ const VENDOR_ORDER: readonly string[] = [
 ];
 
 const GPU_SERIES_ORDER: readonly string[] = [
-  'NVIDIA RTX 50系列', 'NVIDIA RTX 40系列', 'NVIDIA RTX 30系列', 'NVIDIA GT 10系列', 'NVIDIA GT 700系列',
-  'AMD RX 9000系列', 'AMD RX 8000系列', 'AMD RX 7000系列', 'AMD RX 6000系列',
+  'NVIDIA RTX 50系列', 'NVIDIA RTX 40系列', 'NVIDIA RTX 30系列', 'NVIDIA GT 10系列', 'NVIDIA GT 700系列', 'NVIDIA GT 200系列',
+  'AMD RX 9000系列', 'AMD RX 8000系列', 'AMD RX 7000系列', 'AMD RX 6000系列', 'AMD Radeon R7 系列',
   'Intel Arc 系列', 'NVIDIA 專業繪圖卡', 'AMD 專業繪圖卡',
 ];
 
@@ -45,6 +46,22 @@ const PACKAGE_BASE_ORDER: readonly string[] = Object.values(CATEGORY_META)
   .sort((a, b) => a.order - b.order)
   .map(meta => meta.label);
 
+const RAM_DEVICE_ORDER: readonly string[] = ['桌上型 UDIMM', '筆電用 SO-DIMM', '伺服器記憶體'];
+const DDR_ORDER: readonly string[] = ['DDR5', 'DDR4', 'D5', 'D4'];
+const SSD_TYPE_ORDER: readonly string[] = ['M.2 NVMe SSD', 'SATA 2.5吋', '行動外接式'];
+const PCIE_ORDER: readonly string[] = ['PCIe 5.0', 'PCIe 4.0', 'PCIe 3.0'];
+const PSU_FORM_ORDER: readonly string[] = ['ATX 電源', 'SFX 電源', 'SFX-L 電源', 'TFX 電源', 'Flex 電源'];
+const PSU_WATT_ORDER: readonly string[] = ['1000W 以上', '750W~1000W', '600W~750W', '600W 以下'];
+const PSU_RATING_ORDER: readonly string[] = ['80+ 鈦金牌', '80+ 白金牌', '80+ 金牌', '80+ 銀牌', '80+ 銅牌', '80+ 白牌'];
+const PSU_MODULAR_ORDER: readonly string[] = ['全模組', '半模組', '直出非模組'];
+const COOLER_TYPE_ORDER: readonly string[] = ['一體式水冷 (AIO)', '雙塔空冷', '單塔空冷', '下吹式空冷', '散熱膏/配件'];
+const COOLER_SIZE_ORDER: readonly string[] = [
+  '420mm', '360mm', '280mm', '240mm', '120mm',
+  '100mm 以下（低矮型）', '101–150mm', '151–160mm', '161mm 以上',
+];
+const LIGHTING_ORDER: readonly string[] = ['ARGB', 'RGB', '無光'];
+const MONITOR_RESOLUTION_ORDER: readonly string[] = ['5K', '4K UHD', '2K QHD', 'FHD 1080p'];
+
 /** 供 Dashboard 前端腳本注入的排序表（單一真相；client 端 compareNodes 不可自帶清單）。 */
 export const SIDEBAR_ORDERS = {
   socket: SOCKET_ORDER,
@@ -60,11 +77,19 @@ export const SIDEBAR_ORDERS = {
   packageType: PACKAGE_ORDER,
   combo: COMBO_ORDER,
   packageBase: PACKAGE_BASE_ORDER,
+  ramDevice: RAM_DEVICE_ORDER,
+  ddr: DDR_ORDER,
+  ssdType: SSD_TYPE_ORDER,
+  pcie: PCIE_ORDER,
+  psuForm: PSU_FORM_ORDER,
+  psuWatt: PSU_WATT_ORDER,
+  psuRating: PSU_RATING_ORDER,
+  psuModular: PSU_MODULAR_ORDER,
+  coolerType: COOLER_TYPE_ORDER,
+  coolerSize: COOLER_SIZE_ORDER,
+  lighting: LIGHTING_ORDER,
+  monitorResolution: MONITOR_RESOLUTION_ORDER,
 } as const;
-
-const DDR_ORDER: readonly string[] = ['DDR5', 'DDR4', 'D5', 'D4'];
-const DEVICE_ORDER: readonly string[] = ['桌上型 UDIMM', '桌上型', '筆電用 SO-DIMM', '筆電用'];
-const SIZE_ORDER: readonly string[] = ['E-ATX', 'ATX', 'Micro-ATX', 'Mini-ITX'];
 
 export function compareSubcategoryNode(category: string, a: string, b: string): number {
   const exact = exactRank(category, a) - exactRank(category, b);
@@ -138,17 +163,32 @@ function semanticRank(category: string, value: string): number {
   if (category === ProductCategory.CABLE) return orderedRank(value, CABLE_ORDER);
   if (category === ProductCategory.OS) return twoLevelRank(value, OS_TOP_ORDER, OS_LEAF_ORDER);
   if (category === ProductCategory.PACKAGE) return packageRank(value);
-
-  const ddrRank = orderedRank(value, DDR_ORDER);
-  if (ddrRank !== Number.MAX_SAFE_INTEGER) return ddrRank;
-
-  const deviceRank = orderedRank(value, DEVICE_ORDER);
-  if (deviceRank !== Number.MAX_SAFE_INTEGER) return deviceRank;
-
-  const sizeRank = orderedRank(value, SIZE_ORDER);
-  if (sizeRank !== Number.MAX_SAFE_INTEGER) return sizeRank;
+  if (category === ProductCategory.RAM) return layeredRank(value, [RAM_DEVICE_ORDER, DDR_ORDER]);
+  if (category === ProductCategory.SSD) return layeredRank(value, [SSD_TYPE_ORDER, PCIE_ORDER]);
+  if (category === ProductCategory.PSU) {
+    return layeredRank(value, [PSU_FORM_ORDER, PSU_WATT_ORDER, PSU_RATING_ORDER, PSU_MODULAR_ORDER]);
+  }
+  if (category === ProductCategory.COOLER) {
+    return layeredRank(value, [COOLER_TYPE_ORDER, COOLER_SIZE_ORDER, LIGHTING_ORDER]);
+  }
+  if (category === ProductCategory.MONITOR) return orderedRank(value, MONITOR_RESOLUTION_ORDER);
 
   return Number.MAX_SAFE_INTEGER;
+}
+
+/** 依各層規格表產生加權順位；同時支援完整路徑與樹中的裸節點。 */
+function layeredRank(value: string, layers: readonly (readonly string[])[]): number {
+  const matches = layers.map(order => orderedRank(value, order));
+  const first = matches.findIndex(rank => rank !== Number.MAX_SAFE_INTEGER);
+  if (first < 0) return Number.MAX_SAFE_INTEGER;
+
+  let rank = 0;
+  for (let layer = first; layer < matches.length; layer++) {
+    const current = matches[layer] === Number.MAX_SAFE_INTEGER ? 0 : matches[layer];
+    rank = rank * 1000 + current;
+  }
+  // 樹中的裸節點可能從第二/三層開始；加上首層位置可避免不同語意層誤相比。
+  return first * 1_000_000_000_000 + rank;
 }
 
 const THREADRIPPER_ORDER: readonly string[] = [

@@ -116,4 +116,66 @@ describe('compareSubcategoryNode', () => {
       '桌上型 UDIMM > DDR5 > 32G (16G*2) > 6000MHz',
     ]);
   });
+
+  it('散熱器節點依類型、冷排與高度區間的裝機語意排序', () => {
+    expect(sorted(ProductCategory.COOLER, [
+      '散熱膏/配件',
+      '下吹式空冷',
+      '單塔空冷',
+      '雙塔空冷',
+      '一體式水冷 (AIO)',
+    ])).toEqual([
+      '一體式水冷 (AIO)',
+      '雙塔空冷',
+      '單塔空冷',
+      '下吹式空冷',
+      '散熱膏/配件',
+    ]);
+
+    expect(sorted(ProductCategory.COOLER, [
+      '151–160mm',
+      '240mm',
+      '100mm 以下（低矮型）',
+      '420mm',
+      '161mm 以上',
+      '101–150mm',
+    ])).toEqual([
+      '420mm',
+      '240mm',
+      '100mm 以下（低矮型）',
+      '101–150mm',
+      '151–160mm',
+      '161mm 以上',
+    ]);
+  });
+
+  it('其餘側欄規格也使用集中排序表而非字典順序', () => {
+    expect(sorted(ProductCategory.SSD, ['行動外接式', 'SATA 2.5吋', 'M.2 NVMe SSD'])).toEqual([
+      'M.2 NVMe SSD', 'SATA 2.5吋', '行動外接式',
+    ]);
+    expect(sorted(ProductCategory.PSU, ['Flex 電源', 'SFX-L 電源', 'ATX 電源', 'TFX 電源', 'SFX 電源'])).toEqual([
+      'ATX 電源', 'SFX 電源', 'SFX-L 電源', 'TFX 電源', 'Flex 電源',
+    ]);
+    expect(sorted(ProductCategory.HDD, ['企業級硬碟', '桌上型硬碟', 'NAS 專用碟', '監控碟'])).toEqual([
+      '桌上型硬碟', 'NAS 專用碟', '監控碟', '企業級硬碟',
+    ]);
+    expect(sorted(ProductCategory.NETWORK, ['交換器', '無線路由器', '網路卡 / 接收器'])).toEqual([
+      '無線路由器', '網路卡 / 接收器', '交換器',
+    ]);
+    expect(sorted(ProductCategory.FAN, ['其他尺寸風扇', '14cm 風扇', '12cm 風扇'])).toEqual([
+      '12cm 風扇', '14cm 風扇', '其他尺寸風扇',
+    ]);
+    expect(sorted(ProductCategory.CABLE, ['其他線材', '影音線', '網路線'])).toEqual([
+      '網路線', '影音線', '其他線材',
+    ]);
+    expect(sorted(ProductCategory.OS, ['應用軟體 > 防毒軟體', '作業系統 > Windows 11'])).toEqual([
+      '作業系統 > Windows 11', '應用軟體 > 防毒軟體',
+    ]);
+    expect(sorted(ProductCategory.PACKAGE, ['搭購價單品 > CPU 處理器', '整機電腦 > ASUS', '零件組合 > CPU + 主機板'])).toEqual([
+      '整機電腦 > ASUS', '零件組合 > CPU + 主機板', '搭購價單品 > CPU 處理器',
+    ]);
+    expect(sorted(ProductCategory.MONITOR, ['FHD 1080p', '5K', '2K QHD', '4K UHD'])).toEqual([
+      '5K', '4K UHD', '2K QHD', 'FHD 1080p',
+    ]);
+  });
 });
