@@ -70,8 +70,27 @@ const monitorPollution = db.prepare(`
   WHERE category = 'monitor' AND (
     raw_name LIKE '%投影機%' OR raw_name LIKE '%螢幕掛燈%' OR raw_name LIKE '%螢幕架%' OR
     raw_name LIKE '%升降桌%' OR raw_name LIKE '%水冷%' OR raw_name LIKE '%電源供應%' OR
-    raw_name LIKE '%鍵盤%'
+    raw_name LIKE '%鍵盤%' OR raw_name LIKE '%ScreenBar%' OR raw_name LIKE '%ERGO ARM%' OR
+    raw_name LIKE '%萬用螢幕%' OR raw_name LIKE '%擴充螢幕%' OR raw_name LIKE '%洞洞板%'
   )
+`).get() as { cnt: number };
+const gpuPartPollution = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category = 'gpu' AND (
+    (raw_name LIKE '%風扇%' AND (raw_name LIKE '%PWM%' OR raw_name LIKE '%RPM%' OR raw_name LIKE '%軸承%')) OR
+    (raw_name LIKE '%80+%' AND (raw_name LIKE '%全模組%' OR raw_name LIKE '%半模組%' OR raw_name LIKE '%ATX3.%'))
+  )
+`).get() as { cnt: number };
+const motherboardAccessoryPollution = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category = 'motherboard' AND (
+    raw_name LIKE '%延長線%' OR raw_name LIKE '%【PCI-E%】%USB%' OR raw_name LIKE '%【PCI-E%】%Type-C%'
+  )
+`).get() as { cnt: number };
+const fragmentedCoolerHeight = db.prepare(`
+  SELECT COUNT(*) as cnt FROM products
+  WHERE category = 'cooler' AND subcategory LIKE '%空冷 > %mm >%'
+    AND subcategory NOT LIKE '%以下%' AND subcategory NOT LIKE '%以上%' AND subcategory NOT LIKE '%–%'
 `).get() as { cnt: number };
 const gpuBundleResidue = db.prepare(`
   SELECT COUNT(*) as cnt FROM products
@@ -152,7 +171,8 @@ const fanNonFanPollution = db.prepare(`
   SELECT COUNT(*) as cnt FROM products
   WHERE category = 'fan' AND (
     raw_name LIKE '%RTX%' OR raw_name LIKE '%GTX%' OR raw_name LIKE '%水冷%' OR
-    raw_name LIKE '%一體式%' OR raw_name LIKE '%全模組%' OR raw_name LIKE '%集線器%' OR
+    raw_name LIKE '%一體式%' OR raw_name LIKE '%全模組%' OR
+    (raw_name LIKE '%集線器%' AND raw_name NOT LIKE '%內含風扇集線器%') OR
     raw_name LIKE '%支撐架%' OR raw_name LIKE '%千斤頂%' OR raw_name LIKE '%燈條%'
   )
 `).get() as { cnt: number };
@@ -195,6 +215,9 @@ console.log(`GPU brackets/cables in gpu: ${gpuBracket.cnt} (target: 0)`);
 console.log(`Cases in cpu: ${cpuCase.cnt} (target: 0)`);
 console.log(`Motherboards in cpu: ${cpuMotherboard.cnt} (target: 0)`);
 console.log(`Monitor non-monitor pollution: ${monitorPollution.cnt} (target: 0)`);
+console.log(`Fans/PSUs in gpu: ${gpuPartPollution.cnt} (target: 0)`);
+console.log(`Accessories in motherboard: ${motherboardAccessoryPollution.cnt} (target: 0)`);
+console.log(`Fragmented exact cooler heights: ${fragmentedCoolerHeight.cnt} (target: 0)`);
 console.log(`GPU bundle residue: ${gpuBundleResidue.cnt} (target: 0)`);
 console.log(`GPU system residue: ${gpuSystemResidue.cnt} (target: 0)`);
 console.log(`GPU model collision: ${gpuModelCollision.cnt} (target: 0)`);
@@ -206,6 +229,17 @@ console.log(`Complete systems in ssd/cooler: ${systemResidue.cnt} (target: 0)`);
 console.log(`Monitors in speaker: ${speakerMonitorPollution.cnt} (target: 0)`);
 console.log(`Non-disk in hdd (headset/fan/cable): ${hddNonDiskPollution.cnt} (target: 0)`);
 console.log(`Non-fan in fan (gpu/psu/aio/accessory): ${fanNonFanPollution.cnt} (target: 0)`);
+if (fanNonFanPollution.cnt > 0) {
+  console.table(db.prepare(`
+    SELECT raw_name, source, subcategory FROM products
+    WHERE category = 'fan' AND (
+      raw_name LIKE '%RTX%' OR raw_name LIKE '%GTX%' OR raw_name LIKE '%水冷%' OR
+      raw_name LIKE '%一體式%' OR raw_name LIKE '%全模組%' OR
+      (raw_name LIKE '%集線器%' AND raw_name NOT LIKE '%內含風扇集線器%') OR
+      raw_name LIKE '%支撐架%' OR raw_name LIKE '%千斤頂%' OR raw_name LIKE '%燈條%'
+    )
+  `).all());
+}
 console.log(`Non-network in network (printer/charger/handheld): ${networkNonNetPollution.cnt} (target: 0)`);
 console.log(`Furniture in peripherals (chair/desk): ${furniturePollution.cnt} (target: 0)`);
 console.log(`CPU exact duplicate singletons: ${cpuExactSingletons.cnt} (target: 0)`);
@@ -303,6 +337,9 @@ const checks = [
   { name: 'CPU contamination = 0', pass: cpuCase.cnt === 0 },
   { name: 'CPU motherboard leakage = 0', pass: cpuMotherboard.cnt === 0 },
   { name: 'Monitor pollution = 0', pass: monitorPollution.cnt === 0 },
+  { name: 'GPU fan/PSU pollution = 0', pass: gpuPartPollution.cnt === 0 },
+  { name: 'Motherboard accessory pollution = 0', pass: motherboardAccessoryPollution.cnt === 0 },
+  { name: 'Cooler height fragments = 0', pass: fragmentedCoolerHeight.cnt === 0 },
   { name: 'GPU bundle residue = 0', pass: gpuBundleResidue.cnt === 0 },
   { name: 'GPU system residue = 0', pass: gpuSystemResidue.cnt === 0 },
   { name: 'GPU model collision = 0', pass: gpuModelCollision.cnt === 0 },

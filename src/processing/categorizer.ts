@@ -71,7 +71,7 @@ export function isCpuContaminated(name: string): boolean {
   const excludes = [
     '筆電', '筆記型', 'LAPTOP', '掌機', 'CLAW', 'ALLY', 'DECK', 'Z1', 'Z2', 'RYZEN Z', 'NUC', 'MINI PC', '迷你電腦', '準系統',
     '工作站', '套裝電腦', 'AIO PC', '保護蓋', '扣具', '防彎', '散熱器', '水冷', '防彎扣具', '防壓框',
-    '螺絲', '轉接卡', '保護套',
+    '螺絲', '轉接卡', '保護套', '主機板', '主板',
     // 水冷（MasterLiquid「Core II」子字串誤中 CPU）與導熱介質配件（相變導熱貼「適用於CPU」誤中 CPU）
     'LIQUID', '冷頭', '冷排', '導熱貼', '導熱膏', '散熱膏', '相變'
   ];
@@ -80,6 +80,8 @@ export function isCpuContaminated(name: string): boolean {
 
 export function isMbContaminated(name: string): boolean {
   const upper = name.toUpperCase();
+  // 主機板來源也會混入 24Pin 燈效延長線與 PCIe USB 擴充卡；這些品名雖寫「主機板」但不是板卡本體。
+  if (/延長線|【PCI-?E[^】]*】|PCI-?E.{0,16}(?:USB\s*\d+G|TYPE-?C)|\bGALILEO\d*\b|\bEDISON\b.{0,20}\bARDUINO\b/i.test(name)) return true;
   const excludes = [
     '轉接', '擴充', 'PCI-E to', 'E-key', 'M.2 to', '托盤', '支架', '相容', '僅支援', '燈效',
     '套件', '組合', '大全配', '螺絲', '天線', '擋板'
@@ -102,6 +104,9 @@ export function isGpuContaminated(name: string): boolean {
       !/繪圖卡|顯示卡/.test(name)) {
     return true;
   }
+
+  // 部分來源把 RX120/RX140 風扇與 Toughpower 電源放在顯卡群組；用品項簽章覆核來源分類。
+  if (looksLikeStandaloneFan(name) || looksLikePsu(name)) return true;
 
   // 機殼特徵排除
   if (/顯卡長|CPU高|U高|硬碟位|玻璃透側|全景玻璃|支援背插|防塵網|機箱|手提包/i.test(name)) return true;
@@ -188,6 +193,8 @@ export function isOsContaminated(name: string): boolean {
  * 電源供應器規格會寫「黑色線材 / 雙色線材」，需以認證＋模組化簽章擋下。
  */
 export function isCableContaminated(name: string): boolean {
+  // 「主機板 24Pin ARGB 延長線」中的主機板是用途，不是本體；應保留為機內線材。
+  if (/(?:主機板|主板).{0,20}(?:24\s*PIN|ARGB).{0,20}延長線/i.test(name)) return false;
   return /立架|豎立|直立套件|支撐架|顯卡套件|集線器|\bHUB\b|外接盒|硬碟座|讀卡機|機殼|主機板/i.test(name) ||
     /【\d{2}型】|電競螢幕|液晶螢幕/.test(name) ||
     (/80\s?\+|金牌|白金|銅牌|鈦金/.test(name) && /全模組|半模組|ATX\s?3/i.test(name));
@@ -200,7 +207,7 @@ export function isCableContaminated(name: string): boolean {
 function looksLikeCable(name: string): boolean {
   if (isCableContaminated(name)) return false;
   if (!/\d+(?:\.\d+)?\s*(?:米|M\b|CM\b|公分)/i.test(name)) return false;
-  return /公\s*-\s*[公母]|母\s*-\s*[公母]/.test(name) ||
+  return /公\s*(?:-|對)\s*[公母]|母\s*(?:-|對)\s*[公母]/.test(name) ||
     /\b(?:HDMI|DP|DVI|VGA|USB|Type-?[AC]|SATA|IDE|RJ-?45|D-?SUB)\b[^,+＋]{0,14}\bto\b/i.test(name) ||
     /\bCAT\.?\s?[5-8][A-Z]?\b/i.test(name);
 }
@@ -226,9 +233,20 @@ export function isFanContaminated(name: string): boolean {
   return false;
 }
 
+/** 單顆系統風扇簽章：尺寸/控制方式搭配轉速、軸承或明確風扇語意，排除 GPU、PSU 與 CPU 散熱器。 */
+function looksLikeStandaloneFan(name: string): boolean {
+  if (/水冷|一體式|\bAIO\b|下吹式|導管|塔散|散熱器/i.test(name)) return false;
+  if (RE_GPU_MODEL.test(name) || looksLikePsu(name)) return false;
+  const hasIdentity = /風扇|反向扇|反葉扇|\bFAN\b/i.test(name);
+  const hasSize = /(?<!\d)(?:80|92|120|140)(?!\d)|[89]\s*CM|1[24]\s*CM/i.test(name);
+  const hasControl = /\bPWM\b|[34]\s*PIN/i.test(name);
+  const hasMechanicalSpec = /\bRPM\b|\d{3,4}\s*轉|軸承|反向扇|反葉扇/i.test(name);
+  return (hasIdentity && hasMechanicalSpec) || (hasSize && hasControl && hasMechanicalSpec);
+}
+
 /** NETWORK 來源常混入印表機、無線充電座、無線耳麥、無線鍵鼠組、掌機、HDMI 線等「無線/Wi-Fi」誤中品。 */
 export function isNetworkContaminated(name: string): boolean {
-  return /印表機|複合機|事務機|連續供墨|充電座|充電盤|充電器|行動電源|耳機|耳麥|鍵鼠|鍵盤|滑鼠|遊戲鼠|掌機|ALLY|CLAW\s*A\d|HDMI|傳輸線|喇叭|聲霸|SOUNDBAR|擴音機|工作站|網路線|\bCAT\.?\s?[5-8]/i.test(name);
+  return /印表機|複合機|事務機|連續供墨|充電座|充電盤|充電器|行動電源|耳機|耳麥|鍵鼠|鍵盤|滑鼠|遊戲鼠|掌機|ALLY|CLAW\s*A\d|HDMI|傳輸線|喇叭|聲霸|SOUNDBAR|擴音機|工作站|網路線|\bCAT\.?\s?[5-8]|SCREENBAR|螢幕.{0,4}掛燈/i.test(name);
 }
 
 /**
@@ -249,10 +267,15 @@ export function detectPriceCondition(name: string): string | null {
 const RE_CPU_MODEL = /Ryzen\s*(AI\s*)?[3579]|Core\s*(Ultra\s*)?[3579]|Core\s*[3579]\s*\d{2,3}H|Core\s*Ultra|\bC[3579][\s-]?\d{3}H\b|\b[ui][3579][\s-]?\d{3,5}[A-Z0-9]{0,3}|\bR[3579][\s-]?\d{3,4}[A-Z0-9]{0,4}|Ultra\s*[3579][\s-]?\d|Threadripper|\bN[12]\d{2}\b|\bG\d{4}\b/i;
 const RE_STORAGE = /\b\d{3}\s?G(?:B)?\b|\b\d\s?T(?:B)?\b|\bSSD\b|512G|PCIe|M\.2/i;
 // 型號數字後不可用 \b：「RTX 5070Ti / RX9070XT」的 Ti/XT 直接黏尾會使 \b 失效而漏判
-const RE_GPU_MODEL = /\b(RTX|GTX|GT)\s?\d{3,4}(?!\d)|\bRX\s?\d{3,4}(?!\d)|\bArc\s?[AB]\d{3}(?!\d)/i;
+const RE_GPU_MODEL = /\b(?:RTX|GTX)\s?\d{3,4}(?!\d)|\bGT\s?(?:1030|730|710|210)(?!\d)|\bRX\s?(?:[4-9]\d{3}|[456]\d{2})(?!\d)|\bArc\s?[AB]\d{3}(?!\d)/i;
 
-const INTEL_CHIPSETS = ['Z890', 'W890', 'Z790', 'W790', 'B860', 'B760', 'H810', 'H610', 'W680', 'B660'] as const;
-const AMD_CHIPSETS = ['X870E', 'X870', 'WRX90', 'TRX50', 'B850', 'B840', 'X670E', 'X670', 'B650E', 'B650', 'A620', 'B550', 'A520'] as const;
+const INTEL_CHIPSETS = [
+  'Z890', 'W890', 'W880', 'Z790', 'W790', 'B860', 'B760', 'H810', 'H610', 'W680', 'B660',
+  'H510', 'H310', 'H110', 'H81',
+] as const;
+const AMD_CHIPSETS = [
+  'X870E', 'X870', 'WRX90', 'TRX50', 'WRX80', 'B850', 'B840', 'X670E', 'X670', 'B650E', 'B650', 'A620', 'B550', 'A520',
+] as const;
 const MOTHERBOARD_CHIPSETS = [...INTEL_CHIPSETS, ...AMD_CHIPSETS] as const;
 const MOTHERBOARD_CHIPSET_RE = new RegExp(`\\b(?:${MOTHERBOARD_CHIPSETS.join('|')})[A-Z-]*\\b`, 'i');
 const MOTHERBOARD_SIGNAL_RE = /相\s*(電源|供電)|供電|\bDIMM\b|\bM-?ATX\b|MATX|MICRO-ATX|Mini-ITX|\bE?-?ATX\b|\bEEB\b|LGA\d|\bAM[45]\b|晶片組|主機板|\bLAN\b/i;
@@ -462,12 +485,17 @@ export function isMonitorContaminated(name: string): boolean {
   if (/可觸控|觸控顯示|鍵盤|滑鼠/i.test(name)) return true;
   if (/電源供應|POWER\s*SUPPLY|OLED\s*顯示|THOR/i.test(name)) return true;
   if (/投影機|升降桌|電腦桌|電競桌|工作桌/i.test(name)) return true;
+  if (/SCREENBAR|螢幕.{0,4}掛燈|非對稱照明|ERGO\s*ARM|洞洞板|收納架|滿\s*[\d,]+.*贈/i.test(name)) return true;
+  if (/AA級均勻照明|超廣燈體|滿[^：:]{0,15}[：:]?\s*贈|顏色可混.{0,8}活動|LCD磁吸數位螢幕/i.test(name)) return true;
+  // 3.9/6/8.8 吋 LCD 是機殼擴充顯示模組，不是桌面螢幕。
+  if (/\b\d(?:\.\d)?\s*吋.{0,20}(?:LCD|萬用螢幕|擴充螢幕)|(?:LCD|萬用螢幕|擴充螢幕).{0,20}\b\d(?:\.\d)?\s*吋/i.test(name)) return true;
+  if (looksLikeCable(name)) return true;
   const excludes = ['螢幕架', '螢幕支架', '螢幕掛燈', '增高架', '壁掛架', '機殼'];
   return excludes.some(ex => upper.includes(ex));
 }
 
 // 常見螢幕尺寸（吋）白名單，用於從型號數字推斷尺寸
-const MONITOR_SIZES = new Set([22, 23, 24, 25, 27, 28, 29, 30, 31, 32, 34, 37, 38, 40, 42, 43, 45, 48, 49, 55, 57, 65]);
+const MONITOR_SIZES = new Set([19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 31, 32, 34, 37, 38, 40, 42, 43, 45, 48, 49, 55, 57, 65]);
 
 /**
  * Detect category from product name using keyword matching
@@ -487,7 +515,7 @@ export function detectCategory(name: string): ProductCategory {
   }
 
   // 隱式風扇偵測：品名無「風扇」字但具 3/4Pin 接頭 + RPM 轉速簽章（Noctua FLX 等）
-  if (!isFanContaminated(name) && /[34]\s*PIN/i.test(name) && /\bRPM\b/i.test(name)) {
+  if (looksLikeStandaloneFan(name) || (!isFanContaminated(name) && /[34]\s*PIN/i.test(name) && /\bRPM\b/i.test(name))) {
     return ProductCategory.FAN;
   }
 
@@ -513,7 +541,7 @@ export function detectCategory(name: string): ProductCategory {
   }
 
   // 隱式螢幕偵測：來源被標成 speaker，但品名是智慧螢幕/面板規格且含喇叭。
-  if (isSpeakerContaminated(name) && /含喇叭|內建喇叭|SMART\s*M\d|S\d{2}[A-Z]/i.test(name)) {
+  if (!isMonitorContaminated(name) && isSpeakerContaminated(name) && /含喇叭|內建喇叭|SMART\s*M\d|S\d{2}[A-Z]/i.test(name)) {
     return ProductCategory.MONITOR;
   }
 
@@ -607,9 +635,14 @@ const GPU_MODELS: readonly GpuModelDef[] = [
   { needle: '3060', display: 'RTX 3060' },
   { needle: '3050', display: 'RTX 3050' },
   // NVIDIA 舊款 GT
+  { needle: 'N730', display: 'GT 730' },
+  { needle: 'N710', display: 'GT 710' },
+  { needle: 'N210', display: 'GT 210' },
   { needle: 'GT1030', display: 'GT 1030' },
   { needle: 'GT730', display: 'GT 730' },
   { needle: 'GT710', display: 'GT 710' },
+  // AMD 舊款 Radeon（通路料號常寫成 AXR7 240）
+  { needle: 'R7240', display: 'Radeon R7 240' },
   // AMD RX 9000 / 8000
   { needle: '9070XT', display: 'RX 9070 XT' },
   { needle: '9070GRE', display: 'RX 9070 GRE' },
@@ -664,6 +697,7 @@ const GPU_MODELS: readonly GpuModelDef[] = [
 function gpuSeriesFromModel(display: string): string {
   const upper = display.toUpperCase();
   if (upper.startsWith('ARC')) return 'Intel Arc 系列';
+  if (upper.startsWith('RADEON R7')) return 'AMD Radeon R7 系列';
   if (upper.startsWith('RADEON')) return 'AMD 專業繪圖卡';
   if (upper.startsWith('RTX PRO') || upper.startsWith('RTX A') || upper.includes('ADA') ||
       upper.startsWith('T1000') || upper.startsWith('T400')) {
@@ -674,6 +708,7 @@ function gpuSeriesFromModel(display: string): string {
   if (upper.startsWith('RTX 30')) return 'NVIDIA RTX 30系列';
   if (upper.startsWith('GT 10')) return 'NVIDIA GT 10系列';
   if (upper.startsWith('GT 7')) return 'NVIDIA GT 700系列';
+  if (upper.startsWith('GT 2')) return 'NVIDIA GT 200系列';
   if (upper.startsWith('RX 90')) return 'AMD RX 9000系列';
   if (upper.startsWith('RX 80')) return 'AMD RX 8000系列';
   if (upper.startsWith('RX 70') || upper.startsWith('RX 76')) return 'AMD RX 7000系列';
@@ -896,13 +931,14 @@ function detectMbBrand(name: string): string | null {
 
 // 晶片組 → CPU 腳位（裝機第一個要對的規格；側欄最上層）
 const CHIPSET_SOCKET: Record<string, string> = {
-  Z890: 'Intel LGA1851', W890: 'Intel LGA1851', B860: 'Intel LGA1851', H810: 'Intel LGA1851',
+  Z890: 'Intel LGA1851', W890: 'Intel LGA1851', W880: 'Intel LGA1851', B860: 'Intel LGA1851', H810: 'Intel LGA1851',
   Z790: 'Intel LGA1700', B760: 'Intel LGA1700', H610: 'Intel LGA1700', W680: 'Intel LGA1700', B660: 'Intel LGA1700',
+  H510: 'Intel LGA1200', H310: 'Intel LGA1151', H110: 'Intel LGA1151', H81: 'Intel LGA1150',
   W790: 'Intel LGA4677',
   X870E: 'AMD AM5', X870: 'AMD AM5', B850: 'AMD AM5', B840: 'AMD AM5',
   X670E: 'AMD AM5', X670: 'AMD AM5', B650E: 'AMD AM5', B650: 'AMD AM5', A620: 'AMD AM5',
   B550: 'AMD AM4', A520: 'AMD AM4',
-  TRX50: 'AMD sTR5', WRX90: 'AMD sTR5',
+  TRX50: 'AMD sTR5', WRX90: 'AMD sTR5', WRX80: 'AMD sWRX8',
 };
 
 function detectMotherboardSubcategory(name: string): string | null {
@@ -1052,18 +1088,26 @@ function detectCoolerSubcategory(name: string): string | null {
 
   if (type === '散熱膏/配件') return type;
 
-  let height: string | null = null;
-  const heightMatch = name.match(/高\s*(\d+(\.\d+)?)\s*(cm|mm)?/i);
-  if (heightMatch) {
-    const val = parseFloat(heightMatch[1]);
-    const mm = heightMatch[3]?.toLowerCase() === 'cm' ? val * 10 : val;
-    height = `${mm}mm`;
-  } else {
-    const altHeightMatch = name.match(/\b(15\d|16\d)\s*mm\b/i);
-    if (altHeightMatch) height = `${altHeightMatch[1]}mm`;
-  }
+  return hierarchy(type, detectCoolerHeightTier(name), led);
+}
 
-  return hierarchy(type, height, led);
+/**
+ * 空冷高度以裝機相容性區間顯示，避免每個 0.1mm 都形成側欄葉節點。
+ * 通路的「高15.7」慣用單位是公分；無單位且小於 30 時按 cm 轉為 157mm。
+ */
+function detectCoolerHeightTier(name: string): string | null {
+  const explicit = name.match(/高\s*(\d+(?:\.\d+)?)\s*(cm|mm)?/i);
+  const fallback = name.match(/\b(\d{2,3}(?:\.\d+)?)\s*mm\b/i);
+  const raw = explicit?.[1] ?? fallback?.[1];
+  if (!raw) return null;
+
+  const value = parseFloat(raw);
+  const unit = explicit?.[2]?.toLowerCase();
+  const millimeters = unit === 'cm' || (!unit && explicit && value < 30) ? value * 10 : value;
+  if (millimeters <= 100) return '100mm 以下（低矮型）';
+  if (millimeters <= 150) return '101–150mm';
+  if (millimeters <= 160) return '151–160mm';
+  return '161mm 以上';
 }
 
 /** 瓦數藏在型號（UD750GM / Ai1600T / SF750）時，取黏在字母旁、且為 50 倍數的合理瓦數（450~2000W）。 */
@@ -1247,11 +1291,14 @@ function detectMonitorSubcategory(name: string): string | null {
   }
   // 2) 退而求其次：台灣螢幕慣例把尺寸藏在型號數字（XV272→27、VA249→24、PG32→32）
   if (!size) {
-    const re = /[A-Za-z](\d{2})/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(name))) {
-      const n = parseInt(m[1], 10);
-      if (MONITOR_SIZES.has(n)) { size = `${n}吋`; break; }
+    const modelPatterns = [/[A-Za-z](\d{2})/g, /\b(\d{2})[A-Za-z]/gi, /\b(\d{2})\d{1,2}[A-Za-z]/gi];
+    for (const re of modelPatterns) {
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(name))) {
+        const n = parseInt(m[1], 10);
+        if (MONITOR_SIZES.has(n)) { size = `${n}吋`; break; }
+      }
+      if (size) break;
     }
   }
 

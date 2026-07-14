@@ -184,6 +184,16 @@ export const DASHBOARD_SCRIPT = `
       const idx = SIDEBAR_ORDERS.vendor.map(v => v.toUpperCase()).indexOf(label.trim().toUpperCase());
       return idx >= 0 ? idx : Number.MAX_SAFE_INTEGER;
     };
+    const layeredRank = (label, layers) => {
+      const matches = layers.map(order => orderedRank(label, order));
+      const first = matches.findIndex(rank => rank !== Number.MAX_SAFE_INTEGER);
+      if (first < 0) return Number.MAX_SAFE_INTEGER;
+      let rank = 0;
+      for (let i = first; i < matches.length; i++) {
+        rank = rank * 1000 + (matches[i] === Number.MAX_SAFE_INTEGER ? 0 : matches[i]);
+      }
+      return first * 1000000000000 + rank;
+    };
     const semanticRank = (label) => {
       if (cat === 'cpu') return cpuRank(label);
       if (cat === 'motherboard') {
@@ -204,6 +214,15 @@ export const DASHBOARD_SCRIPT = `
       if (cat === 'network') return orderedRank(label, SIDEBAR_ORDERS.network);
       if (cat === 'fan') return orderedRank(label, SIDEBAR_ORDERS.fan);
       if (cat === 'cable') return orderedRank(label, SIDEBAR_ORDERS.cable);
+      if (cat === 'ram') return layeredRank(label, [SIDEBAR_ORDERS.ramDevice, SIDEBAR_ORDERS.ddr]);
+      if (cat === 'ssd') return layeredRank(label, [SIDEBAR_ORDERS.ssdType, SIDEBAR_ORDERS.pcie]);
+      if (cat === 'psu') {
+        return layeredRank(label, [SIDEBAR_ORDERS.psuForm, SIDEBAR_ORDERS.psuWatt, SIDEBAR_ORDERS.psuRating, SIDEBAR_ORDERS.psuModular]);
+      }
+      if (cat === 'cooler') {
+        return layeredRank(label, [SIDEBAR_ORDERS.coolerType, SIDEBAR_ORDERS.coolerSize, SIDEBAR_ORDERS.lighting]);
+      }
+      if (cat === 'monitor') return orderedRank(label, SIDEBAR_ORDERS.monitorResolution);
       if (cat === 'os') {
         const t = orderedRank(label, SIDEBAR_ORDERS.osTop);
         const l = orderedRank(label, SIDEBAR_ORDERS.osLeaf);
@@ -223,27 +242,6 @@ export const DASHBOARD_SCRIPT = `
 
     const semA = semanticRank(a), semB = semanticRank(b);
     if (semA !== semB) return semA - semB;
-
-    const genericOrder = [
-      'DDR5', 'DDR4', 'D5', 'D4',
-      'PCIE 5.0', 'GEN5', 'PCIE 4.0', 'GEN4',
-      'LGA1851', 'LGA1700', 'LGA1200', 'AM5', 'AM4',
-      'CORE I9', 'ULTRA 9', 'CORE I7', 'ULTRA 7', 'CORE I5', 'ULTRA 5', 'CORE I3',
-      'RYZEN 9', 'RYZEN 7', 'RYZEN 5', 'RYZEN 3',
-      'E-ATX', 'ATX', 'MICRO-ATX', 'MINI-ITX',
-      '桌上型 UDIMM', '桌上型', '筆電用 SO-DIMM', '筆電用', '伺服器記憶體',
-      'M.2 NVME SSD', 'SATA 2.5吋', '行動外接式', 'NAS 專用碟', '企業級硬碟', '一般監控/桌上型', '行動外接硬碟',
-      '一體式水冷 (AIO)', '雙塔空冷', '單塔空冷', '下吹式空冷', '散熱膏/配件',
-      // PSU 尺寸（頂層，須早於機殼 'ATX' 以精確命中 'ATX 電源'）
-      'ATX 電源', 'SFX 電源', 'SFX-L 電源', 'TFX 電源', 'Flex 電源',
-      '1000W 以上', '750W~1000W', '600W~750W', '600W 以下',
-      '80+ 鈦金牌', '80+ 白金牌', '80+ 金牌', '80+ 銀牌', '80+ 銅牌', '80+ 白牌',
-      '全模組', '半模組', '直出非模組',
-      '全塔 (E-ATX)', 'ATX 中塔', 'MICRO-ATX 機殼', 'MINI-ITX 機殼', '玻璃透側', '網孔通風',
-      '4K UHD', '2K QHD', 'FHD 1080P',
-    ];
-    const genA = orderedRank(a, genericOrder), genB = orderedRank(b, genericOrder);
-    if (genA !== genB) return genA - genB;
 
     const getCapacityVal = (str) => {
       const m = str.match(/^(\\d+)\\s*(GB|TB|G|T|MB)/i);
@@ -302,13 +300,13 @@ export const DASHBOARD_SCRIPT = `
               const selfLeaf = node.count > 0
                 ? '<div class="tree-sub-node" data-sub="' + escHtml(node.fullPath) + '"><span>全部 ' + escHtml(node.name) + '</span><span style="font-size:0.7rem;opacity:0.6;">(' + node.count + ')</span></div>'
                 : '';
-              // 內層分支預設展開：整棵子分類樹一次可見，不用逐層點到底
+              // 內層分支預設收合，只在使用者點擊該節點時逐層展開。
               html += '<div class="tree-branch-inner">' +
-                      '  <div class="tree-node-parent-inner expanded">' +
+                      '  <div class="tree-node-parent-inner">' +
                       '    <span>' + escHtml(node.name) + '</span>' +
                       '    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>' +
                       '  </div>' +
-                      '  <div class="tree-node-children-inner" style="display:flex;">' +
+                      '  <div class="tree-node-children-inner" style="display:none;">' +
                       selfLeaf + renderTreeHtml(node.children, false) +
                       '  </div>' +
                       '</div>';
