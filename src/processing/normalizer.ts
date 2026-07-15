@@ -211,9 +211,12 @@ function extractThermalPasteWeight(rawName: string): string | null {
   return match ? `${match[1]}g` : null;
 }
 
-function extractKeyboardSwitch(rawName: string): string | null {
+/** 鍵盤軸體標籤（子分類與 normalize 顯示名共用）。長寫在前，避免「紅軸」先吃掉「靜音紅軸」。 */
+export function extractKeyboardSwitch(rawName: string): string | null {
   const match = rawName.match(/靜音紅軸|靜音茶軸|矮紅軸|矮茶軸|紅軸|茶軸|青軸|銀軸|黑軸|白軸|黃軸|綠軸|紫軸/i);
-  return match?.[0] ?? null;
+  if (!match) return null;
+  // 正規化大小寫顯示（品名可能寫「紅軸」或混寫）
+  return match[0];
 }
 
 function appendVariantTokens(name: string, tokens: readonly string[]): string {

@@ -3,10 +3,24 @@
 ## 專案現況
 PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。
 
-## 系統運作狀態（已驗證，2026-07-10）
-資料流：scrape → normalize → categorize → **diy-filter** → **ingest（upsert + 汰除孤兒列）** → match → `products` / `match_groups`。三家 live scrape 正常。目前 live DB **13,728 件商品**、**1,290 組比價組**、19 個主分類都有 match group，**OTHER=0**、價差異常 0。`npm run audit` **29 項檢查全 PASS**。`npm run test` **103 tests**、`npm run build` 通過。
+## 系統運作狀態（已驗證，2026-07-15）
+資料流：scrape → normalize → categorize → **diy-filter** → **ingest（upsert + 汰除孤兒列）** → match → `products` / `match_groups`。`npm run test` **124 tests**、audit / build 通過。
 
-> 商品數自第十六輪的 16,169 降到 13,683，是因為新增了孤兒列汰除：首次執行清掉 2,897 筆早已從來源下架、卻因分類仍屬 DIY 而永遠留在 DB 的殘留列，後續 CPU 清理又移除 5 筆非 DIY 污染。
+### 第二十三輪重點（機殼改「最大板型 > 品牌 > 系列」）
+- **DIY 直覺**：裝機先問「板子進不進得去」→ 側欄第一層改最大支援主機板板型：`Mini-ITX` / `M-ATX` / `ATX` / `E-ATX` / `未標板型`，其下才是品牌與系列。
+- 判定序：E-ATX → M-ATX → Mini-ITX → ATX；排序 `exactTopRank` 避免 `ATX` 誤中 `E-ATX`。
+- 順手清配件：支撐架 / 燈條套件 / `↪` 促銷列 → `isCaseContaminated` 不入庫。
+- 其他 DIY 指標（塔型、雙艙、網孔/全景、背插、顏色）可作後續第二層，本輪先落地相容性。
+
+### 第二十二輪重點（滑鼠類型優先 + 線材細分 + 價格篩選）
+- **滑鼠**＝`用途 > 有線/無線 > 品牌`：`電競滑鼠` 364 / `一般滑鼠` 311 / `垂直滑鼠` 11；例 `電競滑鼠 > 無線 > Logitech`。
+- **線材**改兩層 `大類 > 細類`：`影音線 > HDMI`、`網路線 > CAT.6`、`USB / 傳輸線 > Type-C to C`、`機內排線 / 延長線 > 12VHPWR 電源延長` 等。Type-C 充電線帶 DP Alt Mode 不再被影音線吸走。
+- **Dashboard 價格篩選**：工具列 `$ 最低 – 最高`，debounce 後打 API `price_min`/`price_max`（後端與 repo 本就支援）；最低>最高自動對調；× 清除。
+- **驗證**：test 123、rebuild、audit 32 PASS、build 通過；price 1000–3000 → 3581 組。
+
+### 第二十一輪重點（鍵盤 / 網通 / 耳機麥克風側欄改「類型優先」）
+- **鍵盤**＝`機制 > [軸體] > 有線/無線 > 品牌`；**網通**＝`設備類型 > 品牌`；**耳機 / 麥克風**＝`產品大類 > 品牌`。
+- 喇叭仍 `品牌 > 類型`。
 
 ### 第十九輪重點（全庫複驗 + 內顯整機漏網修正）
 - **全庫複驗**：test 103 / audit 29 PASS / build 通過；三家 live scrape 正常（coolpc 5,854 / sinya 4,305 / autobuy 3,659）。CPU `i5-12400` 只剩 autobuy 一張乾淨卡是真實狀態——sinya 現售版本已改標「【組裝價】」，正確歸入 PACKAGE 搭購價單品。

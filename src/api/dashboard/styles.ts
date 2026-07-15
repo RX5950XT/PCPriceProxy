@@ -181,6 +181,38 @@ header {
 }
 .multi-toggle.active .switch-thumb { transform: translateX(14px); }
 
+/* ─── 價格區間篩選 ─── */
+.price-filter {
+  display: flex; align-items: center; gap: 0.28rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0;
+  padding: 0 0.45rem 0 0.65rem; min-height: 100%;
+  transition: border-color 0.15s;
+}
+.price-filter:focus-within { border-color: var(--accent-line); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.price-filter-label {
+  color: var(--faint); font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.04em; user-select: none;
+}
+.price-filter-sep { color: var(--faint); font-size: 0.78rem; user-select: none; }
+.price-input {
+  width: 4.6rem; background: transparent; border: 0;
+  color: var(--text); font-size: 0.78rem; font-family: inherit;
+  padding: 0.5rem 0.15rem; text-align: right;
+  /* 隱藏 number spinner，維持終端機風格 */
+  -moz-appearance: textfield;
+}
+.price-input::-webkit-outer-spin-button,
+.price-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.price-input::placeholder { color: var(--faint); letter-spacing: 0.02em; }
+.price-input:focus { outline: none; }
+.price-clear {
+  background: transparent; border: 0; color: var(--faint);
+  font-size: 1rem; line-height: 1; cursor: pointer; padding: 0.2rem 0.3rem;
+  font-family: inherit; transition: color 0.14s; display: none;
+}
+.price-clear.visible { display: block; }
+.price-clear:hover { color: var(--text); }
+
 /* ─── 通路篩選 ─── */
 .source-filter {
   display: flex; gap: 0; align-items: stretch;

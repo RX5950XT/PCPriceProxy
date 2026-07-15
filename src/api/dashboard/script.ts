@@ -18,8 +18,11 @@ export const DASHBOARD_SCRIPT = `
   let page = 1;
   let multiOnly = false;
   let source = ''; // 通路篩選：''=全部 / coolpc / sinya / autobuy
+  let priceMin = ''; // 最低價（字串，空＝不限）
+  let priceMax = ''; // 最高價
   const PER_PAGE = 50;
   let searchTimer = null;
+  let priceTimer = null;
   let refreshPollTimer = null;
   let totalProducts = 0;
   let lastUpdatedMs = 0; // 最近一次來源爬取時間（ms），用於可靠判定重新整理是否完成
@@ -37,6 +40,7 @@ export const DASHBOARD_SCRIPT = `
     fetchProducts();
     bindMultiToggle();
     bindSourceFilter();
+    bindPriceFilter();
   });
 
   function bindSourceFilter() {
@@ -135,6 +139,53 @@ export const DASHBOARD_SCRIPT = `
       page = 1;
       fetchProducts();
     });
+  }
+
+  function bindPriceFilter() {
+    const minEl = document.getElementById('price-min');
+    const maxEl = document.getElementById('price-max');
+    const clearBtn = document.getElementById('price-clear');
+    if (!minEl || !maxEl) return;
+
+    const apply = () => {
+      priceMin = (minEl.value || '').trim();
+      priceMax = (maxEl.value || '').trim();
+      // 若最低 > 最高，自動對調，避免空結果
+      const lo = priceMin ? Number(priceMin) : null;
+      const hi = priceMax ? Number(priceMax) : null;
+      if (lo !== null && hi !== null && !Number.isNaN(lo) && !Number.isNaN(hi) && lo > hi) {
+        priceMin = String(hi);
+        priceMax = String(lo);
+        minEl.value = priceMin;
+        maxEl.value = priceMax;
+      }
+      if (clearBtn) clearBtn.classList.toggle('visible', Boolean(priceMin || priceMax));
+      page = 1;
+      fetchProducts();
+    };
+
+    const onInput = () => {
+      clearTimeout(priceTimer);
+      priceTimer = setTimeout(apply, 320);
+    };
+    minEl.addEventListener('input', onInput);
+    maxEl.addEventListener('input', onInput);
+    minEl.addEventListener('change', apply);
+    maxEl.addEventListener('change', apply);
+    minEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } });
+    maxEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } });
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        minEl.value = '';
+        maxEl.value = '';
+        priceMin = '';
+        priceMax = '';
+        clearBtn.classList.remove('visible');
+        page = 1;
+        fetchProducts();
+      });
+    }
   }
 
   function resetTreeActive() {
@@ -429,6 +480,8 @@ export const DASHBOARD_SCRIPT = `
     if (brand) params.set('brand', brand);
     if (multiOnly) params.set('has_multiple_sources', 'true');
     if (source) params.set('source', source);
+    if (priceMin !== '' && !Number.isNaN(Number(priceMin))) params.set('price_min', String(Number(priceMin)));
+    if (priceMax !== '' && !Number.isNaN(Number(priceMax))) params.set('price_max', String(Number(priceMax)));
 
     try {
       const r = await fetch('/api/v1/products?' + params);
@@ -447,7 +500,9 @@ export const DASHBOARD_SCRIPT = `
   function renderProducts(groups) {
     const el = document.getElementById('product-list');
     if (!groups.length) {
-      const hint = multiOnly ? '目前篩選「只看跨店比價」，可關閉以顯示更多商品' : '請嘗試不同的關鍵字或分類';
+      let hint = '請嘗試不同的關鍵字或分類';
+      if (priceMin || priceMax) hint = '目前有價格區間篩選，可放寬最低／最高價';
+      else if (multiOnly) hint = '目前篩選「只看跨店比價」，可關閉以顯示更多商品';
       el.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><p>找不到符合條件的商品</p><small>' + hint + '</small></div>';
       return;
     }

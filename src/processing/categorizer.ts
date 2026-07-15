@@ -1,7 +1,7 @@
 import { ProductCategory } from '../shared/types.js';
 import type { Product } from '../shared/types.js';
 import { CATEGORY_META, isDiyCategory } from '../shared/constants.js';
-import { extractBrand } from './normalizer.js';
+import { extractBrand, extractKeyboardSwitch } from './normalizer.js';
 
 /**
  * Category keyword mapping for fallback detection.
@@ -214,7 +214,12 @@ function looksLikeCable(name: string): boolean {
 
 export function isCaseContaminated(name: string): boolean {
   const upper = name.toUpperCase();
-  return /TRAVEL\s*CASE|ALLY|掌機|收納|保護包|保護套|防潑水|攜行包|包$/.test(upper);
+  // 掌機包 / 收納包
+  if (/TRAVEL\s*CASE|ALLY|掌機|收納|保護包|保護套|防潑水|攜行包|包$/.test(upper)) return true;
+  // 機殼配件（支撐架、直立套件、燈條）不是機殼本體；促銷註記列（↪）也排除
+  if (/支撐架|直立套件|燈條套件|燈效套件|磁吸燈條/i.test(name)) return true;
+  if (/^↪/.test(name.trim())) return true;
+  return false;
 }
 
 /** KEYBOARD 來源常混入電競椅/電競桌/升降桌等家具（非 DIY 零件，過濾後由 diy-filter 移除）。 */
@@ -1192,10 +1197,24 @@ function detectCaseSeries(name: string, brand: string | null): string | null {
   return null;
 }
 
-// 機殼側欄：品牌 > 系列（依實際資料以品牌分組，品牌下再依產品線排序）。
+/**
+ * 機殼最大支援主機板板型（DIY 裝機第一相容條件）。
+ * 判定順序：E-ATX → M-ATX → Mini-ITX → ATX（E-/M- 必須早於裸 ATX，避免子字串誤中）。
+ */
+function detectCaseFormFactor(name: string): string {
+  const upper = name.toUpperCase();
+  if (/\bE-?ATX\b|\bEEB\b|EATX/.test(upper)) return 'E-ATX';
+  if (/\bM-?ATX\b|MATX|MICRO-?ATX|µATX/.test(upper)) return 'M-ATX';
+  if (/\bMINI-?ITX\b|MINI\s*ITX|\bITX\b/.test(upper)) return 'Mini-ITX';
+  if (/\bATX\b/.test(upper)) return 'ATX';
+  return '未標板型';
+}
+
+/** 機殼側欄：最大板型 > 品牌 > 系列（先相容性，再品牌／產品線）。 */
 function detectCaseSubcategory(name: string): string | null {
+  const form = detectCaseFormFactor(name);
   const brand = extractBrand(name) ?? null;
-  return hierarchy(brand, detectCaseSeries(name, brand));
+  return hierarchy(form, brand, detectCaseSeries(name, brand));
 }
 
 // 通路自組整機的「品牌」不是零件品牌，須另表辨識（extractBrand 抓不到）
@@ -1338,30 +1357,18 @@ export function detectSubcategory(category: ProductCategory, name: string, baseC
 
   const upperName = name.toUpperCase();
 
-  // 周邊（鍵鼠/耳機/喇叭/網通）：品牌 > 類型；抓不到品牌時退回只有類型層。
+  // 滑鼠 / 喇叭：品牌 > 類型（抓不到品牌時退回只有類型層）
+  // 鍵盤 / 耳機麥克風 / 網通：類型優先，品牌殿後（見各自 detect*）
   const brand = extractBrand(name) ?? null;
   const withBrand = (type: string | null): string | null => (brand ? hierarchy(brand, type) : type);
+  /** 類型路徑在前、品牌在後；type 可含 `A > B` 多層。 */
+  const typeThenBrand = (type: string): string => (brand ? `${type} > ${brand}` : type);
 
-  if (category === ProductCategory.KEYBOARD) {
-    let type = '一般鍵盤';
-    if (upperName.includes('無線') || upperName.includes('WIRELESS')) type = '無線鍵盤';
-    else if (upperName.includes('機械')) type = '機械式鍵盤';
-    return withBrand(type);
-  }
+  if (category === ProductCategory.KEYBOARD) return detectKeyboardSubcategory(name, brand);
 
-  if (category === ProductCategory.MOUSE) {
-    let type = '一般滑鼠';
-    if (upperName.includes('無線') || upperName.includes('WIRELESS')) type = '無線滑鼠';
-    else if (upperName.includes('電競') || upperName.includes('GAMING')) type = '電競滑鼠';
-    return withBrand(type);
-  }
+  if (category === ProductCategory.MOUSE) return detectMouseSubcategory(name, brand);
 
-  if (category === ProductCategory.HEADSET) {
-    let type = '一般耳機 / 麥克風';
-    if (upperName.includes('無線') || upperName.includes('WIRELESS') || upperName.includes('藍牙') || upperName.includes('BLUETOOTH')) type = '無線耳機';
-    else if (upperName.includes('電競') || upperName.includes('GAMING')) type = '電競耳機';
-    return withBrand(type);
-  }
+  if (category === ProductCategory.HEADSET) return detectHeadsetSubcategory(name, brand);
 
   if (category === ProductCategory.SPEAKER) {
     let type = '電腦喇叭';
@@ -1378,7 +1385,7 @@ export function detectSubcategory(category: ProductCategory, name: string, baseC
   }
 
   if (category === ProductCategory.NETWORK) {
-    // 網通：品牌 > 設備類型（品牌抓不到時退回只有設備類型層）
+    // 網通：設備類型 > 品牌（不再先攤一整排品牌）
     let type = '其他網通設備';
     if (/攝影機|WEBCAM|視訊鏡頭/i.test(name)) type = '網路攝影機';
     else if (/MESH|ZENWIFI|VELOP|\bDECO\b/i.test(name)) type = '無線路由器 > Mesh 網狀';
@@ -1386,7 +1393,7 @@ export function detectSubcategory(category: ProductCategory, name: string, baseC
     else if (/PCE-|PCI-?E|網路卡|網卡|LAN\s*CARD|藍牙接收|藍芽接收|USB.{0,8}(藍牙|藍芽|WI-?FI)/i.test(name)) type = '網路卡 / 接收器';
     else if (/交換器|SWITCH|\bHUB\b/i.test(name)) type = '交換器';
     else if (/NAS|SYNOLOGY|群暉|QNAP|威聯通|華芸|ASUSTOR|DISKSTATION/i.test(name)) type = 'NAS 網路儲存';
-    return withBrand(type);
+    return typeThenBrand(type);
   }
 
   if (category === ProductCategory.CABLE) return detectCableSubcategory(upperName);
@@ -1405,19 +1412,145 @@ export function detectSubcategory(category: ProductCategory, name: string, baseC
   return null;
 }
 
-/** 線材類型（單層）。順序即判定優先序：切換器 → 網路 → 機內 → AC 電源 → 轉接 → 影音 → 傳輸。 */
+/**
+ * 鍵盤：機制（機械/薄膜）> [軸體] > 有線/無線 > 品牌。
+ * 側欄先看「要什麼鍵盤／什麼軸／有線還無線」，品牌最後才展開。
+ */
+function detectKeyboardSubcategory(name: string, brand: string | null): string {
+  const mech = isMechanicalKeyboard(name);
+  const conn = isWirelessPeripheral(name) ? '無線' : '有線';
+  if (mech) {
+    const sw = extractKeyboardSwitch(name);
+    return hierarchy('機械式鍵盤', sw ?? '未標軸', conn, brand) ?? '機械式鍵盤';
+  }
+  return hierarchy('薄膜鍵盤', conn, brand) ?? '薄膜鍵盤';
+}
+
+function isMechanicalKeyboard(name: string): boolean {
+  if (/薄膜/i.test(name)) return false;
+  // 機械本體或軸體/熱插拔/常見軸廠都算機械式
+  return /機械|熱插拔|紅軸|茶軸|青軸|銀軸|黑軸|白軸|黃軸|綠軸|紫軸|Gateron|Cherry\s*MX|Kaihl|Kailh|Outemu|TTC\b|Akko|Jwick|G\s*Pro\s*軸/i.test(name);
+}
+
+function isWirelessPeripheral(name: string): boolean {
+  // 三模/雙模/2.4G/藍牙皆視為可無線；純「有線」標示且無無線訊號才走有線
+  if (/三模|雙模|2\.4\s*G|LIGHTSPEED|UNIFYING/i.test(name)) return true;
+  if (/無線|WIRELESS|藍牙|藍芽|BLUETOOTH/i.test(name)) return true;
+  return false;
+}
+
+/**
+ * 滑鼠：用途類型 > 有線/無線 > 品牌（不再先攤一整排品牌）。
+ * 垂直鼠獨立一類；電競優先於一般（品名常同時寫「無線電競」）。
+ */
+function detectMouseSubcategory(name: string, brand: string | null): string {
+  let type = '一般滑鼠';
+  if (/垂直/i.test(name)) type = '垂直滑鼠';
+  else if (/電競|GAMING|\bDPI\b|LIGHTSPEED|AIMPOINT|SUPERLIGHT|VIPER|DEATHADDER|GLADIUS|HARPE|PULSEFIRE|BASILISK/i.test(name)) {
+    type = '電競滑鼠';
+  }
+  const conn = isWirelessPeripheral(name) ? '無線' : '有線';
+  return hierarchy(type, conn, brand) ?? type;
+}
+
+/**
+ * 耳機 / 麥克風：連線或產品大類 > 品牌。
+ * - 耳機／耳麥：有線耳機 / 無線耳機
+ * - 純麥克風：USB 麥克風 / 專業麥克風 / 無線麥克風 / 麥克風
+ */
+function detectHeadsetSubcategory(name: string, brand: string | null): string {
+  const isMicOnly = /麥克風|MIC(?:ROPHONE)?/i.test(name) && !/耳機|耳麥|HEADSET|HEADPHONE|EARBUD|EARPHONE|入耳|耳罩/i.test(name);
+  if (isMicOnly) {
+    let micType = '麥克風';
+    if (isWirelessPeripheral(name)) micType = '無線麥克風';
+    else if (/\bUSB\b|TYPE-?C/i.test(name)) micType = 'USB 麥克風';
+    else if (/電容|動圈|XLR|直播|錄音|PODCAST|指向/i.test(name)) micType = '專業麥克風';
+    return brand ? `${micType} > ${brand}` : micType;
+  }
+  const type = isWirelessPeripheral(name) ? '無線耳機' : '有線耳機';
+  return brand ? `${type} > ${brand}` : type;
+}
+
+/**
+ * 線材：大類 > 細類（兩層）。判定優先序：
+ * 切換器 → 網路線 → 機內延長 → 排插電源 → 轉接 → 影音（排除 Type-C 充電線）→ USB。
+ */
 function detectCableSubcategory(upperName: string): string {
-  if (/切換器|分配器|KVM|[一二三四]進[一二三四]出/.test(upperName)) return '切換器 / 分配器';
-  if (/網路線|\bCAT\.?\s?[5-8]/.test(upperName)) return '網路線';
-  // 機內：SATA 排線、PCI-E 顯卡延長線、ARGB / 24Pin / 12VHPWR 電源延長線
-  // 料號黏字（SFF8643 / 4SAS）使 \b 失效，故不加詞邊界
-  if (/排線|SFF\d*|SAS|\bIDE\b/.test(upperName)) return '機內排線 / 延長線';
-  if (/(PCI-?E|\d+\s?-?\s?PIN|12VHPWR|ARGB|EPS12V).{0,20}延長線/.test(upperName)) return '機內排線 / 延長線';
-  if (/插座|排插|防雷|過載|延長座|\d+插|電源.{0,4}延長線|延長.{0,3}電源線/.test(upperName)) return '電源延長線 / 插座';
-  if (/轉接頭|轉接器|轉接線/.test(upperName)) return '轉接頭 / 轉接線';
-  if (/HDMI|DISPLAY\s*PORT|\bDP\b|\bDVI|\bVGA\b|D-?SUB|音源|光纖|TOSLINK/.test(upperName)) return '影音線';
-  // USB5G / USB10G 黏尾，不可用 \bUSB\b
-  if (/TYPE-?[AC]|USB|THUNDERBOLT|\bTB[34]\b|充電線|傳輸線/.test(upperName)) return 'USB / 傳輸線';
+  if (/切換器|分配器|KVM|[一二三四]進[一二三四]出/.test(upperName)) {
+    if (/\bKVM\b/i.test(upperName)) return '切換器 / 分配器 > KVM 切換器';
+    if (/分配|一分|一進[二三四五]出|1\s*進/i.test(upperName)) return '切換器 / 分配器 > 訊號分配器';
+    return '切換器 / 分配器 > 訊號切換器';
+  }
+
+  if (/網路線|\bCAT\.?\s?[5-8]/.test(upperName)) {
+    if (/CAT\.?\s*8/i.test(upperName)) return '網路線 > CAT.8';
+    if (/CAT\.?\s*7/i.test(upperName)) return '網路線 > CAT.7';
+    if (/CAT\.?\s*6A/i.test(upperName)) return '網路線 > CAT.6A';
+    if (/CAT\.?\s*6/i.test(upperName)) return '網路線 > CAT.6';
+    if (/CAT\.?\s*5/i.test(upperName)) return '網路線 > CAT.5E';
+    return '網路線 > 其他網路線';
+  }
+
+  // 機內：SATA / PCIe / ARGB / 24Pin / 12VHPWR 延長（料號黏字不可用 \b）
+  const isInternal =
+    /排線|SFF\d*|SAS|\bIDE\b/.test(upperName) ||
+    /(PCI-?E|\d+\s?-?\s?PIN|12VHPWR|12V-2X6|ARGB|EPS12V|STRIMER).{0,24}延長/.test(upperName) ||
+    /12VHPWR|12V-2X6|12\+4/.test(upperName) && /電源線|延長|Equalizer/i.test(upperName);
+  if (isInternal) {
+    if (/12VHPWR|12V-2X6|12\+4|PW16/i.test(upperName)) return '機內排線 / 延長線 > 12VHPWR 電源延長';
+    if (/24\s*-?\s*PIN|PW24/i.test(upperName)) return '機內排線 / 延長線 > 24Pin 電源延長';
+    if (/(?:2\s*[xX*×]\s*8|2\*8|8\s*-?\s*PIN|PW8)/i.test(upperName) && /延長|電源|STRIMER|ARGB/i.test(upperName)) {
+      return '機內排線 / 延長線 > 8Pin 電源延長';
+    }
+    if (/ARGB|STRIMER|發光/i.test(upperName)) return '機內排線 / 延長線 > ARGB 延長線';
+    if (/PCI-?E|顯卡延長/i.test(upperName)) return '機內排線 / 延長線 > PCIe 延長線';
+    if (/SATA/i.test(upperName)) return '機內排線 / 延長線 > SATA 排線';
+    return '機內排線 / 延長線 > 其他機內線';
+  }
+
+  if (/插座|排插|防雷|過載|延長座|\d+插|電源.{0,4}延長線|延長.{0,3}電源線/.test(upperName)) {
+    if (/插座|排插|防雷|過載|延長座|\d+\s*切|\d+\s*座/i.test(upperName)) {
+      return '電源延長線 / 插座 > 延長線插座';
+    }
+    return '電源延長線 / 插座 > 電源線';
+  }
+
+  if (/轉接頭|轉接器|轉接線/.test(upperName)) {
+    if (/HDMI/i.test(upperName)) return '轉接頭 / 轉接線 > HDMI 轉接';
+    if (/DISPLAY\s*PORT|\bDP\b/i.test(upperName)) return '轉接頭 / 轉接線 > DP 轉接';
+    if (/RJ-?45|\bLAN\b|乙太|網路/i.test(upperName)) return '轉接頭 / 轉接線 > 網路口轉接';
+    if (/TYPE-?[AC]|USB/i.test(upperName)) return '轉接頭 / 轉接線 > USB 轉接';
+    return '轉接頭 / 轉接線 > 其他轉接';
+  }
+
+  // Type-C 充電/傳輸線即使帶 DP Alt Mode 也歸 USB，不要被影音線吸走
+  const isUsbForm =
+    /TYPE-?[AC]|USB|THUNDERBOLT|\bTB[34]\b|充電線|傳輸線/.test(upperName);
+  if (!isUsbForm && /HDMI|DISPLAY\s*PORT|\bDP\b|\bDVI|\bVGA\b|D-?SUB|音源|光纖|TOSLINK/.test(upperName)) {
+    if (/HDMI/i.test(upperName)) return '影音線 > HDMI';
+    if (/DISPLAY\s*PORT|\bDP\b/i.test(upperName)) return '影音線 > DisplayPort';
+    if (/\bDVI/i.test(upperName)) return '影音線 > DVI';
+    if (/\bVGA\b|D-?SUB/i.test(upperName)) return '影音線 > VGA';
+    if (/音源|光纖|TOSLINK|3\.5\s*MM/i.test(upperName)) return '影音線 > 音源 / 光纖';
+    return '影音線 > 其他影音';
+  }
+
+  if (isUsbForm) {
+    if (/THUNDERBOLT|\bTB[34]\b/i.test(upperName)) return 'USB / 傳輸線 > Thunderbolt';
+    if (/LIGHTNING/i.test(upperName) && /TYPE-?\s*C|四合一|多合一/i.test(upperName)) {
+      return 'USB / 傳輸線 > 多接頭充電線';
+    }
+    if (/TYPE-?\s*C.{0,16}(?:TO|轉|對).{0,12}(?:TYPE-?\s*)?C|C\s*(?:TO|轉|對)\s*(?:TYPE-?\s*)?C/i.test(upperName)) {
+      return 'USB / 傳輸線 > Type-C to C';
+    }
+    if (/TYPE-?\s*A.{0,16}(?:TO|轉|對).{0,12}(?:TYPE-?\s*)?C|A\s*(?:TO|轉|對)\s*(?:TYPE-?\s*)?C/i.test(upperName)) {
+      return 'USB / 傳輸線 > Type-A to C';
+    }
+    if (/LIGHTNING/i.test(upperName)) return 'USB / 傳輸線 > Lightning';
+    if (/充電線/i.test(upperName)) return 'USB / 傳輸線 > 充電線';
+    return 'USB / 傳輸線 > 其他 USB';
+  }
+
   return '其他線材';
 }
 

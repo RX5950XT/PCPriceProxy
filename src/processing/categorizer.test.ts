@@ -275,11 +275,11 @@ describe('第十三輪：HDD/FAN/NETWORK 污染與子分類修正', () => {
   });
 
   it('NETWORK 子分類拆分：攝影機 / NAS / Mesh / 網卡', () => {
-    // 網通改「品牌 > 設備類型」（品牌抓不到才退回只有類型層）
-    expect(categorizeProduct(makeProduct('圓剛 PW315 高畫質定焦網路攝影機/AI人臉追蹤', ProductCategory.NETWORK)).subcategory).toBe('AverMedia > 網路攝影機');
-    expect(categorizeProduct(makeProduct('Synology DS1823xs+【8Bay】AMD Ryzen V1780B 四核(3.35GHz)/8GB/10Gb*1', ProductCategory.NETWORK)).subcategory).toBe('Synology > NAS 網路儲存');
-    expect(categorizeProduct(makeProduct('華碩 ZENWIFI BT8 兩入組 (BE14000/Wi-Fi 7/三頻/MESH/隱藏八天線/2.5Gb)', ProductCategory.NETWORK)).subcategory).toBe('ASUS > 無線路由器 > Mesh 網狀');
-    expect(categorizeProduct(makeProduct('TP-LINK Archer TBE400E ( BE6500 / Wi-Fi 7 / 雙天線 / 藍牙5.4 / PCI-E)', ProductCategory.NETWORK)).subcategory).toBe('TP-Link > 網路卡 / 接收器');
+    // 網通＝設備類型 > 品牌（不再先攤一整排品牌）
+    expect(categorizeProduct(makeProduct('圓剛 PW315 高畫質定焦網路攝影機/AI人臉追蹤', ProductCategory.NETWORK)).subcategory).toBe('網路攝影機 > AverMedia');
+    expect(categorizeProduct(makeProduct('Synology DS1823xs+【8Bay】AMD Ryzen V1780B 四核(3.35GHz)/8GB/10Gb*1', ProductCategory.NETWORK)).subcategory).toBe('NAS 網路儲存 > Synology');
+    expect(categorizeProduct(makeProduct('華碩 ZENWIFI BT8 兩入組 (BE14000/Wi-Fi 7/三頻/MESH/隱藏八天線/2.5Gb)', ProductCategory.NETWORK)).subcategory).toBe('無線路由器 > Mesh 網狀 > ASUS');
+    expect(categorizeProduct(makeProduct('TP-LINK Archer TBE400E ( BE6500 / Wi-Fi 7 / 雙天線 / 藍牙5.4 / PCI-E)', ProductCategory.NETWORK)).subcategory).toBe('網路卡 / 接收器 > TP-Link');
   });
 
   it('M.2 外接盒（USB10G 無容量）不可留在 SSD；USB10G 不可誤判為容量', () => {
@@ -369,16 +369,33 @@ describe('第十五輪：除污與品牌分類', () => {
     expect(bd4.subcategory).toBe('伺服器記憶體 > DDR5 > 96G > 6400MHz');
   });
 
-  it('機殼改「品牌 > 系列」，中文品牌走別名', () => {
+  it('機殼＝最大板型 > 品牌 > 系列；中文品牌走別名', () => {
     const tt = categorizeProduct(makeProduct('曜越 View 390 Air 黑 顯卡長42/CPU高16/鷗翼式曲面玻璃/分艙設計/支援背插/ATX', ProductCategory.CASE));
-    expect(tt.subcategory).toBe('Thermaltake > View');
+    expect(tt.subcategory).toBe('ATX > Thermaltake > View');
+    const eatx = categorizeProduct(makeProduct('聯力 O11 Dynamic EVO RGB 黑 顯卡長45.5/U高16.7/全景玻璃/E-ATX', ProductCategory.CASE));
+    expect(eatx.subcategory).toBe('E-ATX > Lian Li > O11');
+    const matx = categorizeProduct(makeProduct('華碩 Prime AP201 白 顯卡長33.8/CPU高17/方形進氣孔/M-ATX', ProductCategory.CASE));
+    expect(matx.subcategory).toBe('M-ATX > ASUS > Prime');
+    const itx = categorizeProduct(makeProduct('Cooler Master 酷碼【NCORE 100 MAX】ITX電腦機殼《古銅》', ProductCategory.CASE));
+    expect(itx.subcategory).toMatch(/^Mini-ITX > Cooler Master/);
   });
 
-  it('鍵盤 / 喇叭改「品牌 > 類型」', () => {
+  it('鍵盤＝機制 > 軸 > 有線/無線 > 品牌；喇叭仍品牌 > 類型', () => {
     const kb = categorizeProduct(makeProduct('keychron K8 Max 80% 三模機械鍵盤 鋁框 RGB Mac/Win 熱插拔 Super紅軸', ProductCategory.KEYBOARD));
-    expect(kb.subcategory).toBe('Keychron > 機械式鍵盤');
+    expect(kb.subcategory).toBe('機械式鍵盤 > 紅軸 > 無線 > Keychron');
+    const membrane = categorizeProduct(makeProduct('羅技 Logitech K120 有線鍵盤 薄膜', ProductCategory.KEYBOARD));
+    expect(membrane.subcategory).toBe('薄膜鍵盤 > 有線 > Logitech');
     const spk = categorizeProduct(makeProduct('漫步者Edifier R2750DB 三音路喇叭 /Bluetooth V4.', ProductCategory.SPEAKER));
     expect(spk.subcategory).toBe('Edifier > 藍牙 / 無線喇叭');
+  });
+
+  it('耳機 / 麥克風＝連線或產品大類 > 品牌', () => {
+    const wireless = categorizeProduct(makeProduct('羅技G Pro X II 職業級無線電競耳麥 第二代/黑色/無線/Lightspeed', ProductCategory.HEADSET));
+    expect(wireless.subcategory).toBe('無線耳機 > Logitech');
+    const wired = categorizeProduct(makeProduct('HyperX Cloud II 電競耳機 有線 7.1', ProductCategory.HEADSET));
+    expect(wired.subcategory).toBe('有線耳機 > HyperX');
+    const usbMic = categorizeProduct(makeProduct('圓剛 AM310 USB 麥克風', ProductCategory.HEADSET));
+    expect(usbMic.subcategory).toBe('USB 麥克風 > AverMedia');
   });
 
   it('條件價單品移出零件分類，歸「整機/組合 > 搭購價單品 > 原分類 > 條件」', () => {
@@ -494,15 +511,17 @@ describe('第十七輪：線材獨立分類、OS/軟體合併、光碟機移除'
     expect(cat('PC-cillin 2025 雲端版 12個月1台防護版', ProductCategory.OS).subcategory).toBe('應用軟體 > 防毒軟體');
   });
 
-  it('線材依類型分層；沒有「線」字的接頭配對也要撈到', () => {
-    expect(cat('廣鐸 CAT.6網路線-3米').subcategory).toBe('網路線');
-    expect(cat('LINDY 林帝【47592】CAT.6A 1米 支援到1Gbps U/FTP純銅鍍金接點 / 極細線 / 灰').subcategory).toBe('網路線');
-    expect(cat('3C Pig【HDMI-100】HDMI 2.0 公-公 / 鍍金頭 / 全銅 / 抗干擾磁環 / 1米').subcategory).toBe('影音線');
-    expect(cat('Gigastone【CC-7800B】Type-C to C USB10G / 100W充電傳輸線 / 黑 / 1.5M').subcategory).toBe('USB / 傳輸線');
-    expect(cat('保護傘 安全插座延長線/6切6座獨立開關/過載自動斷電保護/耐燃材質/1.8米').subcategory).toBe('電源延長線 / 插座');
-    expect(cat('SATA 硬碟排線 ( 黑 )', ProductCategory.HDD).subcategory).toBe('機內排線 / 延長線');
-    expect(cat('酷碼 PCI-E 5.0 X16 延長線(黑) 200mm/90度/抗電磁干擾').subcategory).toBe('機內排線 / 延長線');
-    expect(cat('LIAN LI 聯力 STRIMER WIRELESS 24PIN 無線 ARGB延長線 (需搭無線控制器)').subcategory).toBe('機內排線 / 延長線');
+  it('線材依大類 > 細類分層；沒有「線」字的接頭配對也要撈到', () => {
+    expect(cat('廣鐸 CAT.6網路線-3米').subcategory).toBe('網路線 > CAT.6');
+    expect(cat('LINDY 林帝【47592】CAT.6A 1米 支援到1Gbps U/FTP純銅鍍金接點 / 極細線 / 灰').subcategory).toBe('網路線 > CAT.6A');
+    expect(cat('3C Pig【HDMI-100】HDMI 2.0 公-公 / 鍍金頭 / 全銅 / 抗干擾磁環 / 1米').subcategory).toBe('影音線 > HDMI');
+    expect(cat('Gigastone【CC-7800B】Type-C to C USB10G / 100W充電傳輸線 / 黑 / 1.5M').subcategory).toBe('USB / 傳輸線 > Type-C to C');
+    expect(cat('保護傘 安全插座延長線/6切6座獨立開關/過載自動斷電保護/耐燃材質/1.8米').subcategory).toBe('電源延長線 / 插座 > 延長線插座');
+    expect(cat('SATA 硬碟排線 ( 黑 )', ProductCategory.HDD).subcategory).toBe('機內排線 / 延長線 > SATA 排線');
+    expect(cat('酷碼 PCI-E 5.0 X16 延長線(黑) 200mm/90度/抗電磁干擾').subcategory).toBe('機內排線 / 延長線 > PCIe 延長線');
+    expect(cat('LIAN LI 聯力 STRIMER WIRELESS 24PIN 無線 ARGB延長線 (需搭無線控制器)').subcategory).toBe('機內排線 / 延長線 > 24Pin 電源延長');
+    // Type-C 充電線帶 DP Alt Mode 不可被影音線吸走
+    expect(cat('LINDY 林帝 Type-C to C 公-公 20Gbps 傳輸線 最大60W / DP Alt Mode / 1M').subcategory).toBe('USB / 傳輸線 > Type-C to C');
   });
 
   it('內建 KVM 的電競螢幕不可被線材分類吸走', () => {
@@ -557,7 +576,7 @@ describe('第十八輪：側欄分類精度與節點收斂', () => {
 
     const cable = categorizeProduct(makeProduct(extension, ProductCategory.MOTHERBOARD));
     expect(cable.category).toBe(ProductCategory.CABLE);
-    expect(cable.subcategory).toBe('機內排線 / 延長線');
+    expect(cable.subcategory).toBe('機內排線 / 延長線 > 24Pin 電源延長');
     expect(categorizeProduct(makeProduct(addInCard, ProductCategory.MOTHERBOARD)).category).toBe(ProductCategory.OTHER);
   });
 
@@ -577,7 +596,18 @@ describe('第十八輪：側欄分類精度與節點收斂', () => {
 
     expect(monitor.subcategory).toBe('27吋');
     expect(cable.category).toBe(ProductCategory.CABLE);
-    expect(cable.subcategory).toBe('影音線');
+    expect(cable.subcategory).toBe('影音線 > VGA');
+  });
+
+  it('滑鼠＝用途 > 有線/無線 > 品牌', () => {
+    const wireless = categorizeProduct(makeProduct('羅技 G304 Lightspeed 無線電競滑鼠 (藍色/無線)', ProductCategory.MOUSE));
+    expect(wireless.subcategory).toBe('電競滑鼠 > 無線 > Logitech');
+    const wired = categorizeProduct(makeProduct('雷蛇Razer Cobra響尾蛇 光學滑鼠 /有線/3代按鍵/6組可編程/Chroma RGB/8500 DPI', ProductCategory.MOUSE));
+    expect(wired.subcategory).toBe('電競滑鼠 > 有線 > Razer');
+    const office = categorizeProduct(makeProduct('Logitech 羅技 M171 無線滑鼠《紅》', ProductCategory.MOUSE));
+    expect(office.subcategory).toBe('一般滑鼠 > 無線 > Logitech');
+    const vertical = categorizeProduct(makeProduct('羅技 Lift 人體工學垂直滑鼠(玫瑰粉)/無線-藍牙', ProductCategory.MOUSE));
+    expect(vertical.subcategory).toBe('垂直滑鼠 > 無線 > Logitech');
   });
 
   it('空冷高度正規化為裝機有意義的區間，不產生 15.xmm 碎片節點', () => {
@@ -604,14 +634,14 @@ describe('第十八輪：側欄分類精度與節點收斂', () => {
     expect(h310.subcategory).toBe('Intel LGA1151 > H310 > ASUS');
   });
 
-  it('機殼品牌別名能形成品牌頂層，不再落入未分類平列', () => {
+  it('機殼品牌別名落在板型之下，不再落入未分類平列', () => {
     const apex = categorizeProduct(makeProduct('Apexgaming 艾湃 ZENITH TA100 玻璃透側 ATX機殼', ProductCategory.CASE));
     const mavoly = categorizeProduct(makeProduct('Mavoly 松聖 甘蔗 ATX電腦機殼', ProductCategory.CASE));
     const enermax = categorizeProduct(makeProduct('保銳 ENERPAZO EP237 白 玻璃側板 ATX機殼', ProductCategory.CASE));
 
-    expect(apex.subcategory).toBe('Apexgaming');
-    expect(mavoly.subcategory).toBe('Mavoly');
-    expect(enermax.subcategory).toBe('Enermax');
+    expect(apex.subcategory).toBe('ATX > Apexgaming');
+    expect(mavoly.subcategory).toBe('ATX > Mavoly');
+    expect(enermax.subcategory).toBe('ATX > Enermax');
   });
 
   it('通路常見的數字開頭螢幕型號能抽出尺寸', () => {
@@ -640,11 +670,18 @@ describe('第十八輪：側欄分類精度與節點收斂', () => {
     expect(categorizeProduct(makeProduct(edison, ProductCategory.MOTHERBOARD)).category).toBe(ProductCategory.OTHER);
   });
 
-  it('1st Player 與電鎧機殼有可篩選的品牌頂層', () => {
+  it('1st Player 與電鎧機殼落在板型 > 品牌', () => {
     const firstPlayer = categorizeProduct(makeProduct('1st Player SP7 黑 玻璃透側 ATX機殼', ProductCategory.CASE));
     const darkArmor = categorizeProduct(makeProduct('電鎧 DK104 A.RGB 玻璃透側 E-ATX電腦機殼', ProductCategory.CASE));
 
-    expect(firstPlayer.subcategory).toBe('1st Player');
-    expect(darkArmor.subcategory).toBe('電鎧');
+    expect(firstPlayer.subcategory).toBe('ATX > 1st Player');
+    expect(darkArmor.subcategory).toBe('E-ATX > 電鎧');
+  });
+
+  it('機殼配件（支撐架／燈條套件）不可留在 CASE', () => {
+    expect(categorizeProduct(makeProduct('華碩 ROG Herculx 顯示卡支撐架 /氣泡水平儀/ARGB燈效/2年(機殼需配置電源倉)', ProductCategory.CASE)).category)
+      .not.toBe(ProductCategory.CASE);
+    expect(categorizeProduct(makeProduct('華碩 GT502 Horizon 機殼專用 ARGB(黑) 燈效套件 /磁吸式/二年保', ProductCategory.CASE)).category)
+      .not.toBe(ProductCategory.CASE);
   });
 });

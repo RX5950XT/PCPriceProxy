@@ -23,10 +23,42 @@ const GPU_SERIES_ORDER: readonly string[] = [
 ];
 
 const HDD_TYPE_ORDER: readonly string[] = ['桌上型硬碟', 'NAS 專用碟', '監控碟', '企業級硬碟', '行動外接硬碟'];
+// 機殼最大板型：小→大（DIY 由緊湊往標準擴），未標殿後
+const CASE_FORM_ORDER: readonly string[] = ['Mini-ITX', 'M-ATX', 'ATX', 'E-ATX', '未標板型'];
 const NETWORK_ORDER: readonly string[] = ['無線路由器', '網路卡 / 接收器', '交換器', 'NAS 網路儲存', '網路攝影機', '其他網通設備'];
+// 鍵盤：機制 > 軸體 > 有線/無線 > 品牌（軸體長寫在前，避免 includes 被短寫先命中）
+const KEYBOARD_TYPE_ORDER: readonly string[] = ['機械式鍵盤', '薄膜鍵盤'];
+const KEYBOARD_SWITCH_ORDER: readonly string[] = [
+  '靜音紅軸', '靜音茶軸', '矮紅軸', '矮茶軸',
+  '紅軸', '茶軸', '青軸', '銀軸', '黑軸', '白軸', '黃軸', '綠軸', '紫軸', '未標軸',
+];
+const KEYBOARD_CONN_ORDER: readonly string[] = ['有線', '無線'];
+// 耳機 / 麥克風：連線或產品大類 > 品牌
+const HEADSET_TYPE_ORDER: readonly string[] = [
+  '有線耳機', '無線耳機', 'USB 麥克風', '專業麥克風', '無線麥克風', '麥克風',
+];
+// 滑鼠：用途 > 有線/無線 > 品牌
+const MOUSE_TYPE_ORDER: readonly string[] = ['電競滑鼠', '垂直滑鼠', '一般滑鼠'];
 const FAN_ORDER: readonly string[] = ['12cm 風扇', '14cm 風扇', '8/9cm 小風扇', '其他尺寸風扇'];
+// 線材：大類 > 細類
 const CABLE_ORDER: readonly string[] = [
   '網路線', '影音線', 'USB / 傳輸線', '轉接頭 / 轉接線', '電源延長線 / 插座', '機內排線 / 延長線', '切換器 / 分配器', '其他線材',
+];
+const CABLE_LEAF_ORDER: readonly string[] = [
+  // 網路線
+  'CAT.8', 'CAT.7', 'CAT.6A', 'CAT.6', 'CAT.5E', '其他網路線',
+  // 影音
+  'HDMI', 'DisplayPort', 'DVI', 'VGA', '音源 / 光纖', '其他影音',
+  // USB
+  'Thunderbolt', 'Type-C to C', 'Type-A to C', '多接頭充電線', 'Lightning', '充電線', '其他 USB',
+  // 轉接
+  'HDMI 轉接', 'DP 轉接', 'USB 轉接', '網路口轉接', '其他轉接',
+  // 電源座
+  '延長線插座', '電源線',
+  // 機內
+  '12VHPWR 電源延長', '24Pin 電源延長', '8Pin 電源延長', 'ARGB 延長線', 'PCIe 延長線', 'SATA 排線', '其他機內線',
+  // 切換器
+  'KVM 切換器', '訊號切換器', '訊號分配器',
 ];
 // 作業系統 / 軟體：兩層（作業系統 > Windows 11…、應用軟體 > 防毒軟體…）
 const OS_TOP_ORDER: readonly string[] = ['作業系統', '應用軟體'];
@@ -69,9 +101,16 @@ export const SIDEBAR_ORDERS = {
   vendor: VENDOR_ORDER,
   gpuSeries: GPU_SERIES_ORDER,
   hddType: HDD_TYPE_ORDER,
+  caseForm: CASE_FORM_ORDER,
   network: NETWORK_ORDER,
+  keyboardType: KEYBOARD_TYPE_ORDER,
+  keyboardSwitch: KEYBOARD_SWITCH_ORDER,
+  keyboardConn: KEYBOARD_CONN_ORDER,
+  headsetType: HEADSET_TYPE_ORDER,
+  mouseType: MOUSE_TYPE_ORDER,
   fan: FAN_ORDER,
   cable: CABLE_ORDER,
+  cableLeaf: CABLE_LEAF_ORDER,
   osTop: OS_TOP_ORDER,
   osLeaf: OS_LEAF_ORDER,
   packageType: PACKAGE_ORDER,
@@ -158,9 +197,18 @@ function semanticRank(category: string, value: string): number {
     return Number.MAX_SAFE_INTEGER;
   }
   if (category === ProductCategory.HDD) return orderedRank(value, HDD_TYPE_ORDER);
+  // 機殼板型用「第一層精確比對」：裸 ATX 不可因 includes 誤中 E-ATX / M-ATX
+  if (category === ProductCategory.CASE) return exactTopRank(value, CASE_FORM_ORDER);
   if (category === ProductCategory.NETWORK) return orderedRank(value, NETWORK_ORDER);
+  if (category === ProductCategory.KEYBOARD) {
+    return layeredRank(value, [KEYBOARD_TYPE_ORDER, KEYBOARD_SWITCH_ORDER, KEYBOARD_CONN_ORDER]);
+  }
+  if (category === ProductCategory.MOUSE) {
+    return layeredRank(value, [MOUSE_TYPE_ORDER, KEYBOARD_CONN_ORDER]);
+  }
+  if (category === ProductCategory.HEADSET) return orderedRank(value, HEADSET_TYPE_ORDER);
   if (category === ProductCategory.FAN) return orderedRank(value, FAN_ORDER);
-  if (category === ProductCategory.CABLE) return orderedRank(value, CABLE_ORDER);
+  if (category === ProductCategory.CABLE) return twoLevelRank(value, CABLE_ORDER, CABLE_LEAF_ORDER);
   if (category === ProductCategory.OS) return twoLevelRank(value, OS_TOP_ORDER, OS_LEAF_ORDER);
   if (category === ProductCategory.PACKAGE) return packageRank(value);
   if (category === ProductCategory.RAM) return layeredRank(value, [RAM_DEVICE_ORDER, DDR_ORDER]);
@@ -256,6 +304,14 @@ function orderedRank(value: string, order: readonly string[]): number {
     if (upper === item || upper.includes(item)) return i;
   }
   return Number.MAX_SAFE_INTEGER;
+}
+
+/** 只比對路徑第一層（`A > B > C` 的 A），避免短 label 被子字串誤中。 */
+function exactTopRank(value: string, order: readonly string[]): number {
+  const top = (value.includes('>') ? value.slice(0, value.indexOf('>')) : value).trim();
+  if (!top) return Number.MAX_SAFE_INTEGER;
+  const idx = order.findIndex(item => item === top);
+  return idx >= 0 ? idx : Number.MAX_SAFE_INTEGER;
 }
 
 function capacityValue(value: string): number {

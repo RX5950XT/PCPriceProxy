@@ -80,6 +80,13 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
         <button class="src-btn" data-src="sinya"><span class="src-dot"></span>欣亞</button>
         <button class="src-btn" data-src="autobuy"><span class="src-dot"></span>Autobuy</button>
       </div>
+      <div class="price-filter" title="依最低價區間篩選（留空＝不限）">
+        <span class="price-filter-label">$</span>
+        <input type="number" id="price-min" class="price-input" placeholder="最低" min="0" step="100" inputmode="numeric">
+        <span class="price-filter-sep">–</span>
+        <input type="number" id="price-max" class="price-input" placeholder="最高" min="0" step="100" inputmode="numeric">
+        <button type="button" class="price-clear" id="price-clear" title="清除價格篩選" aria-label="清除價格篩選">×</button>
+      </div>
       <div class="multi-toggle" id="multi-toggle" title="只顯示有兩家以上通路的可比價商品">
         <span class="switch-track"><span class="switch-thumb"></span></span>
         <span>只看跨店比價</span>

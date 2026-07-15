@@ -162,11 +162,47 @@ describe('compareSubcategoryNode', () => {
     expect(sorted(ProductCategory.NETWORK, ['交換器', '無線路由器', '網路卡 / 接收器'])).toEqual([
       '無線路由器', '網路卡 / 接收器', '交換器',
     ]);
+    expect(sorted(ProductCategory.KEYBOARD, [
+      '薄膜鍵盤 > 無線 > Logitech',
+      '機械式鍵盤 > 茶軸 > 有線 > Keychron',
+      '機械式鍵盤 > 紅軸 > 無線 > ASUS',
+    ])).toEqual([
+      '機械式鍵盤 > 紅軸 > 無線 > ASUS',
+      '機械式鍵盤 > 茶軸 > 有線 > Keychron',
+      '薄膜鍵盤 > 無線 > Logitech',
+    ]);
+    expect(sorted(ProductCategory.HEADSET, ['麥克風 > Rode', '無線耳機 > Logitech', '有線耳機 > HyperX', 'USB 麥克風 > AverMedia'])).toEqual([
+      '有線耳機 > HyperX', '無線耳機 > Logitech', 'USB 麥克風 > AverMedia', '麥克風 > Rode',
+    ]);
     expect(sorted(ProductCategory.FAN, ['其他尺寸風扇', '14cm 風扇', '12cm 風扇'])).toEqual([
       '12cm 風扇', '14cm 風扇', '其他尺寸風扇',
     ]);
-    expect(sorted(ProductCategory.CABLE, ['其他線材', '影音線', '網路線'])).toEqual([
-      '網路線', '影音線', '其他線材',
+    expect(sorted(ProductCategory.CABLE, ['其他線材', '影音線 > HDMI', '網路線 > CAT.6'])).toEqual([
+      '網路線 > CAT.6', '影音線 > HDMI', '其他線材',
+    ]);
+    expect(sorted(ProductCategory.MOUSE, [
+      '一般滑鼠 > 無線 > Logitech',
+      '電競滑鼠 > 有線 > Razer',
+      '電競滑鼠 > 無線 > ASUS',
+      '垂直滑鼠 > 無線 > Logitech',
+    ])).toEqual([
+      '電競滑鼠 > 有線 > Razer',
+      '電競滑鼠 > 無線 > ASUS',
+      '垂直滑鼠 > 無線 > Logitech',
+      '一般滑鼠 > 無線 > Logitech',
+    ]);
+    expect(sorted(ProductCategory.CASE, [
+      'E-ATX > Lian Li > O11',
+      'Mini-ITX > Cooler Master',
+      'ATX > Thermaltake > View',
+      'M-ATX > ASUS > Prime',
+      '未標板型 > ASUS',
+    ])).toEqual([
+      'Mini-ITX > Cooler Master',
+      'M-ATX > ASUS > Prime',
+      'ATX > Thermaltake > View',
+      'E-ATX > Lian Li > O11',
+      '未標板型 > ASUS',
     ]);
     expect(sorted(ProductCategory.OS, ['應用軟體 > 防毒軟體', '作業系統 > Windows 11'])).toEqual([
       '作業系統 > Windows 11', '應用軟體 > 防毒軟體',
