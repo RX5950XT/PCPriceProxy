@@ -8,7 +8,8 @@
     "build": "tsc",
     "test": "vitest run",
     "scrape:test": "tsx src/scripts/test-scrape.ts",
-    "audit": "tsx src/scripts/audit-pipeline.ts"
+    "audit": "tsx src/scripts/audit-pipeline.ts",
+    "enrich:monitor-seed": "tsx src/scripts/seed-monitor-catalog.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

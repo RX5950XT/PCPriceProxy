@@ -36,6 +36,16 @@ export interface ProductFilters {
   readonly refreshTier?: string;
   /** 螢幕解析度（specs.resolution） */
   readonly resolution?: string;
+  /** 主機板板型（specs.mbForm） */
+  readonly mbForm?: string;
+  /** 主機板記憶體插槽數（specs.mbDimm） */
+  readonly mbDimm?: string;
+  /** 主機板 Wi-Fi（specs.mbWifi） */
+  readonly mbWifi?: string;
+  /** 主機板記憶體世代（specs.mbDdr） */
+  readonly mbDdr?: string;
+  /** 主機板有線網路（specs.mbLan） */
+  readonly mbLan?: string;
   readonly priceMin?: number;
   readonly priceMax?: number;
   readonly inStock?: boolean;

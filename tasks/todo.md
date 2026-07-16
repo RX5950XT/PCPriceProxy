@@ -1,20 +1,19 @@
-# PCPriceProxy — 第三十輪：散熱全類複驗 + 文件推送
+# PCPriceProxy — 第三十一輪：螢幕 M0+M1
 
 ## 完成
-- [x] AIO 判定／高度只信高／分體配件／筆電墊
-- [x] 全庫 cooler 稽核：交叉漏=0、分體不在 AIO、161 全有「高」
-- [x] AGENTS / CLAUDE / CONTEXT / README
-- [x] test 141 / rebuild / audit / build
+- [x] M0：detectMonitorResolution（49/57/34、PA/X*U、MAG 24/25 F）
+- [x] M1：enrichment model key + catalog + merge
+- [x] seed 腳本 `npm run enrich:monitor-seed`
+- [x] test 146 / rebuild / audit / build
+- [x] AGENTS / CLAUDE / CONTEXT
 
-## 庫內 cooler
-| 類型 | 筆數 |
-|---|---|
-| AIO | 561 |
-| 單塔 | 320 |
-| 雙塔 | 179 |
-| 下吹 | 57 |
-| 配件 | 104 |
+## 指標
+| 項目 | 前 | 後 |
+|---|---|---|
+| resolution 未標示 | 868 | **581** |
+| panel 未標示 | 76 | 76 |
+| refresh 未標示 | 434 | 434 |
 
-## 下一步（螢幕，未做）
-- M1：`spec_enrichment` + 本地 catalog 回填未標示 facet
-- M2：非同步 web Provider（可選）
+## 後續（可選）
+- 繼續填 `monitor-catalog.json`（seed 高頻）
+- M2：spec_enrichment 表 + 非同步外查

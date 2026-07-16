@@ -333,6 +333,115 @@ describe('第十四輪：主機板腳位樹與 GPU 品牌層', () => {
     expect(intel.subcategory).toBe('Intel LGA1851 > B860 > ASUS');
   });
 
+  it('主機板規格寫入 specs 供工具列 facet，不進 subcategory path', () => {
+    const wifi7 = categorizeProduct(makeProduct(
+      '微星 PRO Z890-S WIFI PZ 背插式 (ATX/1H1P1C/Realtek 2.5Gb/WiFi 7+BT 5.4/銀色/註冊四年保) 12+1+1+1相供電',
+      ProductCategory.MOTHERBOARD,
+    ));
+    expect(wifi7.subcategory).toBe('Intel LGA1851 > Z890 > MSI');
+    expect(wifi7.specs.mbForm).toBe('ATX');
+    expect(wifi7.specs.mbWifi).toBe('Wi-Fi 7');
+    expect(wifi7.specs.mbDdr).toBe('DDR5');
+    expect(wifi7.specs.mbLan).toBe('2.5GbE');
+
+    const twoDimm = categorizeProduct(makeProduct(
+      '華碩 B860M-E-CSM (M-ATX/1H/Realtek 2.5Gb/2xDIMM/註冊四年保) 6+1+1+1相供電',
+      ProductCategory.MOTHERBOARD,
+    ));
+    expect(twoDimm.specs.mbForm).toBe('M-ATX');
+    expect(twoDimm.specs.mbDimm).toBe('2 槽');
+    expect(twoDimm.specs.mbWifi).toBe('無 Wi-Fi');
+    expect(twoDimm.specs.mbDdr).toBe('DDR5');
+    expect(twoDimm.specs.mbLan).toBe('2.5GbE');
+
+    const itx = categorizeProduct(makeProduct(
+      '微星 MPG B650I EDGE WIFI(Mini-ITX/LAN 2.5G+無線/註五年)8+2+1相, $4990',
+      ProductCategory.MOTHERBOARD,
+    ));
+    expect(itx.specs.mbForm).toBe('Mini-ITX');
+    expect(itx.specs.mbDimm).toBe('2 槽'); // ITX 隱式
+    expect(itx.specs.mbWifi).toBe('有 Wi-Fi');
+    expect(itx.specs.mbDdr).toBe('DDR5'); // AM5 平台推斷
+
+    const d4 = categorizeProduct(makeProduct(
+      '華碩 TUF GAMING B760-PLUS WIFI D4 (ATX/1H1P/Realtek 2.5Gb/Wi-Fi 6+BT 5.2/註冊五年保)',
+      ProductCategory.MOTHERBOARD,
+    ));
+    expect(d4.specs.mbDdr).toBe('DDR4');
+    expect(d4.specs.mbWifi).toBe('Wi-Fi 6');
+    expect(d4.specs.mbForm).toBe('ATX');
+
+    const lan5 = categorizeProduct(makeProduct(
+      '華擎 X870E Challenger WiFi White(ATX/LAN 5G+Wi-Fi 7/註五年)20+2+1相',
+      ProductCategory.MOTHERBOARD,
+    ));
+    expect(lan5.specs.mbLan).toBe('5GbE');
+    expect(lan5.specs.mbWifi).toBe('Wi-Fi 7');
+    expect(lan5.specs.mbForm).toBe('ATX');
+
+    const eatx = categorizeProduct(makeProduct(
+      'MSI 微星 MEG X870E GODLIKE MAX AM5主機板(EATX/3+2年保)',
+      ProductCategory.MOTHERBOARD,
+    ));
+    expect(eatx.specs.mbForm).toBe('E-ATX');
+    expect(eatx.specs.mbDdr).toBe('DDR5');
+    expect(eatx.specs.mbWifi).toBe('未標示'); // 短品名不猜有無 Wi-Fi
+
+    // facet 五欄必填
+    for (const key of ['mbForm', 'mbDimm', 'mbWifi', 'mbDdr', 'mbLan'] as const) {
+      expect(wifi7.specs[key]).toBeTruthy();
+      expect(twoDimm.specs[key]).toBeTruthy();
+    }
+  });
+
+  it('主機板 DDR：平台定案；LGA1700 雙軌靠 D4 標示／白名單／預設 DDR5', () => {
+    // 單一平台
+    expect(categorizeProduct(makeProduct(
+      '微星 MAG B850 TOMAHAWK MAX WIFI (ATX/2.5G LAN)', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR5'); // AM5
+    expect(categorizeProduct(makeProduct(
+      '華碩 PRIME B550M-K (M-ATX/1Gb)', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR4'); // AM4
+    expect(categorizeProduct(makeProduct(
+      '華碩 PRIME B860M-A WIFI (M-ATX)', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR5'); // LGA1851
+
+    // LGA1700：明示 D4 / D5
+    expect(categorizeProduct(makeProduct(
+      '華碩 PRIME B760M-F D4-CSM(M-ATX/LAN 1Gb/2DIMM)', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR4');
+    expect(categorizeProduct(makeProduct(
+      'ASUS 華碩 PRIME B760M-F-CSM D5 LGA1700主機板', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR5');
+
+    // LGA1700：未標 D4 → 預設 DDR5（W680 / 中高階 B760）
+    expect(categorizeProduct(makeProduct(
+      '華碩 PRO WS W680-ACE(ATX/雙Intel 2.5Gb/註四年)', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR5');
+    expect(categorizeProduct(makeProduct(
+      '華碩 TUF GAMING B760M-PLUS WIFI II (M-ATX/Realtek 2.5Gb/Wi-Fi 6E)', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR5');
+    expect(categorizeProduct(makeProduct(
+      '微星 PRO Z790-P WIFI(ATX/Intel 2.5Gb+無線)', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR5');
+    expect(categorizeProduct(makeProduct(
+      '華碩 PRIME B760M-F-CSM(M-ATX/LAN 1Gb/2DIMM)8相', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR5'); // 有 D4 兄弟 SKU 時未標＝DDR5
+
+    // LGA1700：靜默 DDR4 白名單
+    expect(categorizeProduct(makeProduct(
+      '技嘉 B760M H V2 (M-ATX/1H1P/Realtek 1Gb/2xDIMM)', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR4');
+    expect(categorizeProduct(makeProduct(
+      '華擎 H610M-H2/M.2(M-ATX/LAN 1Gb/四年保)3+1+1 相電源', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR4');
+
+    // 雙支援 COMBO（不可被 D4 子字串先吃成 DDR4）
+    expect(categorizeProduct(makeProduct(
+      '華擎 H610M COMBO II(M-ATX/支援D4&D5記憶體/LAN 1Gb/三年保)', ProductCategory.MOTHERBOARD,
+    )).specs.mbDdr).toBe('DDR4/DDR5');
+  });
+
   it('GPU 子分類為「系列 > 型號 > 品牌」，僅多顯存型號插入容量層', () => {
     const single = categorizeProduct(makeProduct('技嘉 RTX 5090 GAMING OC 32G (std:2655MHz/三風扇)', ProductCategory.GPU));
     expect(single.subcategory).toBe('NVIDIA RTX 50系列 > RTX 5090 > GIGABYTE');
@@ -774,15 +883,109 @@ describe('第十八輪：側欄分類精度與節點收斂', () => {
     expect(dual.specs.resolution).toBe('4K / UHD');
   });
 
+  it('L0：PA*U／49 吋帶魚／34 吋超寬可推解析度；catalog 補 PA32USD', () => {
+    const pa = categorizeProduct(makeProduct(
+      '華碩 ProArt PA32USD〈2H1P1TB4/OLED/240Hz/HDR400/Thunderbolt 4〉可升降旋轉',
+      ProductCategory.MONITOR,
+    ));
+    expect(pa.specs.resolution).toBe('4K / UHD');
+    expect(pa.specs.panel).toBe('OLED');
+
+    const fish = categorizeProduct(makeProduct(
+      'AOC AGON PD49〈2H1P1C/OLED曲面/1800R/240Hz/含喇叭/HDR400/HDMI 2.1〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(fish.specs.resolution).toBe('帶魚 (DQHD)');
+
+    const uw34 = categorizeProduct(makeProduct(
+      '【34型】MSI MAG 345CQR 電競螢幕 (曲面/1800R/180Hz/含喇叭)',
+      ProductCategory.MONITOR,
+    ));
+    expect(uw34.specs.resolution).toBe('超寬 (UWQHD)');
+  });
+
+  it('15–25 吋無高解析標記→FHD；27 吋辦公 PRO→FHD；磁吸小 LCD 不入 MONITOR', () => {
+    const office24 = categorizeProduct(makeProduct(
+      'Acer KA242Y P6〈1A1H/IPS/144Hz/含喇叭〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(office24.specs.resolution).toBe('FHD');
+    expect(office24.specs.panel).toBe('IPS');
+
+    const pro27 = categorizeProduct(makeProduct(
+      'MSI PRO MP273L E14〈1A1H/IPS/144Hz〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(pro27.specs.resolution).toBe('FHD');
+
+    // 名稱已寫 4K 不可被規則改掉
+    const named4k = categorizeProduct(makeProduct(
+      '華碩 VY229HE〈1A1H/IPS/4K〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(named4k.specs.resolution).toBe('4K / UHD');
+
+    const mag = categorizeProduct(makeProduct(
+      '利民 Trofeo Vision LCD Black 數位螢幕/6.86吋/1280*480/磁吸式/USB介面可外接/一年',
+      ProductCategory.MONITOR,
+    ));
+    expect(mag.category).not.toBe(ProductCategory.MONITOR);
+  });
+
+  it('AQ 中綴／MAG CQ／AOC Q27／Alienware 高信心解析度', () => {
+    const aq = categorizeProduct(makeProduct(
+      '華碩 TUF Gaming VG27AQL5A-W〈2H1P/IPS/210Hz/含喇叭/HDR400/白色〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(aq.specs.resolution).toBe('2K / QHD');
+
+    // VA27AQ：曾被 27 吋辦公 IPS→FHD 誤殺，必須 2K
+    const vaAq = categorizeProduct(makeProduct(
+      '華碩 VA27AQ〈1A1H1P/IPS/含喇叭/HDR10〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(vaAq.specs.resolution).toBe('2K / QHD');
+    expect(vaAq.specs.panel).toBe('IPS');
+    const vaAqSe = categorizeProduct(makeProduct(
+      '華碩 VA27AQSE〈1A1H1P/IPS/含喇叭/HDR10〉可升降旋轉',
+      ProductCategory.MONITOR,
+    ));
+    expect(vaAqSe.specs.resolution).toBe('2K / QHD');
+
+    const cq = categorizeProduct(makeProduct(
+      'MSI MAG 321CQF E18〈2H1P/VA曲面/1500R/180Hz〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(cq.specs.resolution).toBe('2K / QHD');
+
+    const aoc = categorizeProduct(makeProduct(
+      'AOC Q27G40ZDF〈1H1P/OLED/240Hz/HDR10〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(aoc.specs.resolution).toBe('2K / QHD');
+
+    const aw = categorizeProduct(makeProduct(
+      'DELL Alienware AW2726DM〈2H1P/OLED/240Hz/HDR400/HDMI 2.1〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(aw.specs.resolution).toBe('2K / QHD');
+
+    const aw4k = categorizeProduct(makeProduct(
+      'DELL Alienware AW2725Q〈2H1P/OLED/240Hz/HDR400〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(aw4k.specs.resolution).toBe('4K / UHD');
+  });
+
   it('面板／Hz／解析度缺資料時寫未標示，三欄必有值且無選項外孤兒', () => {
-    // 辦公屏常見：有 IPS／無 Hz／無解析度
+    // 辦公屏：有 IPS、無 Hz；22 吋無高解析標記 → L0 填 FHD，Hz 仍可未標示
     const office = categorizeProduct(makeProduct(
       '華碩 VY229HE〈1A1H/IPS〉',
       ProductCategory.MONITOR,
     ));
     expect(office.specs.panel).toBe('IPS');
     expect(office.specs.refreshTier).toBe('未標示');
-    expect(office.specs.resolution).toBe('未標示');
+    expect(office.specs.resolution).toBe('FHD');
 
     // 量子點非 OLED 不應落未標
     const qd = categorizeProduct(makeProduct(

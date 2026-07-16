@@ -119,6 +119,12 @@ const MONITOR_REFRESH_ORDER: readonly string[] = [
 const MONITOR_RESOLUTION_ORDER: readonly string[] = [
   '8K', '5K', '4K / UHD', '帶魚 (DQHD)', '超寬 (UWQHD)', '超寬 (UWFHD)', '2K / QHD', 'FHD', '未標示',
 ];
+// 主機板工具列 facet（不進側欄；側欄仍是 腳位 > 晶片組 > 品牌）
+const MB_FORM_ORDER: readonly string[] = ['Mini-ITX', 'M-ATX', 'ATX', 'E-ATX', '未標示'];
+const MB_DIMM_ORDER: readonly string[] = ['2 槽', '4 槽', '8 槽', '未標示'];
+const MB_WIFI_ORDER: readonly string[] = ['Wi-Fi 7', 'Wi-Fi 6E', 'Wi-Fi 6', '有 Wi-Fi', '無 Wi-Fi', '未標示'];
+const MB_DDR_ORDER: readonly string[] = ['DDR5', 'DDR4', 'DDR4/DDR5', '未標示'];
+const MB_LAN_ORDER: readonly string[] = ['10GbE', '5GbE', '2.5GbE', '1GbE', '未標示'];
 
 /** 供 Dashboard 前端腳本注入的排序表（單一真相；client 端 compareNodes 不可自帶清單）。 */
 export const SIDEBAR_ORDERS = {
@@ -158,6 +164,11 @@ export const SIDEBAR_ORDERS = {
   monitorPanel: MONITOR_PANEL_ORDER,
   monitorRefresh: MONITOR_REFRESH_ORDER,
   monitorResolution: MONITOR_RESOLUTION_ORDER,
+  mbForm: MB_FORM_ORDER,
+  mbDimm: MB_DIMM_ORDER,
+  mbWifi: MB_WIFI_ORDER,
+  mbDdr: MB_DDR_ORDER,
+  mbLan: MB_LAN_ORDER,
 } as const;
 
 export function compareSubcategoryNode(category: string, a: string, b: string): number {

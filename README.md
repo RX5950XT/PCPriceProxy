@@ -43,7 +43,7 @@ Base URL：`http://localhost:3000/api/v1`。所有回應統一 `{ success, data,
 
 | 方法 | 端點 | 說明 |
 |---|---|---|
-| GET | `/health` | 健康檢查：狀態、uptime、商品總量、各來源件數 |
+| GET | `/health` | 健康檢查：狀態、uptime、`totalMatchGroups`（UI 總量）、`totalProducts`／各來源件數（爬取列） |
 | GET | `/products` | 比價卡列表（讀 `match_groups`）；篩選參數見下表 |
 | GET | `/products/:id` | 單一商品明細 |
 | GET | `/products/:id/history` | 該商品價格歷史 |

@@ -130,6 +130,26 @@ export class ProductRepository {
       conditions.push(`json_extract(specs, '$.resolution') = @resolution`);
       params.resolution = filters.resolution;
     }
+    if (filters.mbForm) {
+      conditions.push(`json_extract(specs, '$.mbForm') = @mbForm`);
+      params.mbForm = filters.mbForm;
+    }
+    if (filters.mbDimm) {
+      conditions.push(`json_extract(specs, '$.mbDimm') = @mbDimm`);
+      params.mbDimm = filters.mbDimm;
+    }
+    if (filters.mbWifi) {
+      conditions.push(`json_extract(specs, '$.mbWifi') = @mbWifi`);
+      params.mbWifi = filters.mbWifi;
+    }
+    if (filters.mbDdr) {
+      conditions.push(`json_extract(specs, '$.mbDdr') = @mbDdr`);
+      params.mbDdr = filters.mbDdr;
+    }
+    if (filters.mbLan) {
+      conditions.push(`json_extract(specs, '$.mbLan') = @mbLan`);
+      params.mbLan = filters.mbLan;
+    }
     if (filters.priceMin !== undefined) {
       conditions.push('price >= @priceMin');
       params.priceMin = filters.priceMin;
@@ -190,10 +210,24 @@ export class ProductRepository {
   }
 
   getCategories(): { category: string; count: number }[] {
-    // 以「比價組數」計（與列表顯示的「共 N 組」一致），避免件數 vs 組數落差造成的困惑
+    // 以「比價組數」計（與列表「共 N 組」、頂欄總量一致）。勿改 products 列數——同 SKU 跨店多列會灌水。
     return this.db.prepare(
       'SELECT category, COUNT(*) as count FROM match_groups GROUP BY category ORDER BY count DESC'
     ).all() as { category: string; count: number }[];
+  }
+
+  /** 全庫／單分類比價組數；Dashboard 頂欄與側欄必須用此單位，不可混用 products 列數。 */
+  getMatchGroupCount(category?: string): number {
+    if (category) {
+      const row = this.db.prepare(
+        'SELECT COUNT(*) as count FROM match_groups WHERE category = ?',
+      ).get(category) as CountRow;
+      return row.count;
+    }
+    const row = this.db.prepare(
+      'SELECT COUNT(*) as count FROM match_groups',
+    ).get() as CountRow;
+    return row.count;
   }
 
   getSourceStatus(): SourceStatus[] {
@@ -393,7 +427,7 @@ export class ProductRepository {
       conditions.push('id IN (SELECT match_group_id FROM products WHERE source = @source)');
       params.source = filters.source;
     }
-    // 面板／更新率存在 products.specs；match_groups 無此欄，走子查詢
+    // facet specs 存在 products.specs；match_groups 無此欄，走子查詢
     if (filters.panel) {
       conditions.push(
         `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.panel') = @panel)`,
@@ -411,6 +445,36 @@ export class ProductRepository {
         `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.resolution') = @resolution)`,
       );
       params.resolution = filters.resolution;
+    }
+    if (filters.mbForm) {
+      conditions.push(
+        `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.mbForm') = @mbForm)`,
+      );
+      params.mbForm = filters.mbForm;
+    }
+    if (filters.mbDimm) {
+      conditions.push(
+        `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.mbDimm') = @mbDimm)`,
+      );
+      params.mbDimm = filters.mbDimm;
+    }
+    if (filters.mbWifi) {
+      conditions.push(
+        `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.mbWifi') = @mbWifi)`,
+      );
+      params.mbWifi = filters.mbWifi;
+    }
+    if (filters.mbDdr) {
+      conditions.push(
+        `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.mbDdr') = @mbDdr)`,
+      );
+      params.mbDdr = filters.mbDdr;
+    }
+    if (filters.mbLan) {
+      conditions.push(
+        `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.mbLan') = @mbLan)`,
+      );
+      params.mbLan = filters.mbLan;
     }
     if (filters.hasMultipleSources) {
       conditions.push('has_multiple_sources = 1');

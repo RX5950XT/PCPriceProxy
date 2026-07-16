@@ -23,11 +23,16 @@ export const DASHBOARD_SCRIPT = `
   let panel = ''; // 螢幕面板（specs.panel）
   let refreshTier = ''; // 螢幕更新率階（specs.refreshTier）
   let resolution = ''; // 螢幕解析度（specs.resolution）
+  let mbForm = ''; // 主機板板型（specs.mbForm）
+  let mbDimm = ''; // 主機板記憶體槽（specs.mbDimm）
+  let mbWifi = ''; // 主機板 Wi-Fi（specs.mbWifi）
+  let mbDdr = ''; // 主機板 DDR（specs.mbDdr）
+  let mbLan = ''; // 主機板有線網（specs.mbLan）
   const PER_PAGE = 50;
   let searchTimer = null;
   let priceTimer = null;
   let refreshPollTimer = null;
-  let totalProducts = 0;
+  let totalGroups = 0; // 比價組總數（與側欄分類 count 合計、列表「共 N 組」同一單位）
   let lastUpdatedMs = 0; // 最近一次來源爬取時間（ms），用於可靠判定重新整理是否完成
 
   // 分類顯示中繼資料（label/icon），由 /api/v1/categories 載入後填入。
@@ -40,13 +45,15 @@ export const DASHBOARD_SCRIPT = `
   document.addEventListener('DOMContentLoaded', () => {
     buildSidebar();
     buildMonitorFacetButtons();
+    buildMotherboardFacetButtons();
     fetchStatus();
     fetchProducts();
     bindMultiToggle();
     bindSourceFilter();
     bindPriceFilter();
     bindMonitorFilters();
-    syncMonitorFiltersVisibility();
+    bindMotherboardFilters();
+    syncCategoryFiltersVisibility();
   });
 
   function bindSourceFilter() {
@@ -165,6 +172,70 @@ export const DASHBOARD_SCRIPT = `
     }
   }
 
+  function buildMotherboardFacetButtons() {
+    const defs = [
+      { id: 'mb-form-filter', orderKey: 'mbForm', dataKey: 'mbForm' },
+      { id: 'mb-dimm-filter', orderKey: 'mbDimm', dataKey: 'mbDimm' },
+      { id: 'mb-wifi-filter', orderKey: 'mbWifi', dataKey: 'mbWifi' },
+      { id: 'mb-ddr-filter', orderKey: 'mbDdr', dataKey: 'mbDdr' },
+      { id: 'mb-lan-filter', orderKey: 'mbLan', dataKey: 'mbLan' },
+    ];
+    defs.forEach(({ id, orderKey, dataKey }) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const list = SIDEBAR_ORDERS[orderKey] || [];
+      list.forEach(v => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'facet-btn';
+        btn.dataset[dataKey] = v;
+        btn.textContent = v;
+        el.appendChild(btn);
+      });
+    });
+  }
+
+  function bindMotherboardFilters() {
+    const bind = (id, dataAttr, setter) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.querySelectorAll('.facet-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          el.querySelectorAll('.facet-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          setter(btn.dataset[dataAttr] || '');
+          page = 1;
+          fetchProducts();
+        });
+      });
+    };
+    bind('mb-form-filter', 'mbForm', v => { mbForm = v; });
+    bind('mb-dimm-filter', 'mbDimm', v => { mbDimm = v; });
+    bind('mb-wifi-filter', 'mbWifi', v => { mbWifi = v; });
+    bind('mb-ddr-filter', 'mbDdr', v => { mbDdr = v; });
+    bind('mb-lan-filter', 'mbLan', v => { mbLan = v; });
+  }
+
+  function clearMotherboardFilters() {
+    mbForm = '';
+    mbDimm = '';
+    mbWifi = '';
+    mbDdr = '';
+    mbLan = '';
+    const clear = (id, dataAttr) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.querySelectorAll('.facet-btn').forEach(b => b.classList.remove('active'));
+      const all = el.querySelector('.facet-btn[data-' + dataAttr + '=""]');
+      if (all) all.classList.add('active');
+    };
+    clear('mb-form-filter', 'mb-form');
+    clear('mb-dimm-filter', 'mb-dimm');
+    clear('mb-wifi-filter', 'mb-wifi');
+    clear('mb-ddr-filter', 'mb-ddr');
+    clear('mb-lan-filter', 'mb-lan');
+  }
+
   function syncMonitorFiltersVisibility() {
     const el = document.getElementById('monitor-filters');
     if (!el) return;
@@ -176,8 +247,33 @@ export const DASHBOARD_SCRIPT = `
     }
   }
 
+  function syncMotherboardFiltersVisibility() {
+    const el = document.getElementById('motherboard-filters');
+    if (!el) return;
+    if (category === 'motherboard') {
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+      if (mbForm || mbDimm || mbWifi || mbDdr || mbLan) clearMotherboardFilters();
+    }
+  }
+
+  function syncCategoryFiltersVisibility() {
+    syncMonitorFiltersVisibility();
+    syncMotherboardFiltersVisibility();
+  }
+
   function catLabel(c) { return (CAT_META[c] && CAT_META[c].label) || (c || '').toUpperCase(); }
   function catIcon(c) { return (CAT_META[c] && CAT_META[c].icon) || '📦'; }
+
+  /** 頂欄／「全部商品」統一顯示比價組總數（與側欄各分類 count 合計必須相等） */
+  function setTotalGroups(n) {
+    totalGroups = n;
+    const el = document.getElementById('stat-total');
+    if (el) el.textContent = n.toLocaleString() + ' 組';
+    const allCount = document.getElementById('node-all-count');
+    if (allCount) allCount.textContent = n.toLocaleString();
+  }
 
   // ── 資料驅動側欄 ──
   async function buildSidebar() {
@@ -186,8 +282,11 @@ export const DASHBOARD_SCRIPT = `
       const r = await fetch('/api/v1/categories');
       const j = await r.json();
       const cats = (j.success && Array.isArray(j.data)) ? j.data : [];
+      const sum = cats.reduce((s, item) => s + (item.count || 0), 0);
 
-      let html = '<div class="tree-node active" id="node-all" data-cat=""><span class="cat-icon">🗂️</span><span class="cat-label">全部商品</span></div>';
+      let html = '<div class="tree-node active" id="node-all" data-cat="">' +
+                '<span class="cat-icon">🗂️</span><span class="cat-label">全部商品</span>' +
+                '<span class="cat-count" id="node-all-count">' + sum.toLocaleString() + '</span></div>';
       cats.forEach(item => {
         CAT_META[item.category] = { label: item.label, icon: item.icon };
         html += '<div class="tree-branch" data-cat="' + escHtml(item.category) + '">' +
@@ -201,9 +300,12 @@ export const DASHBOARD_SCRIPT = `
                 '</div>';
       });
       tree.innerHTML = html;
+      setTotalGroups(sum);
       bindSidebarEvents();
     } catch (e) {
-      tree.innerHTML = '<div class="tree-node active" id="node-all" data-cat=""><span class="cat-icon">🗂️</span><span class="cat-label">全部商品</span></div>';
+      tree.innerHTML = '<div class="tree-node active" id="node-all" data-cat="">' +
+                      '<span class="cat-icon">🗂️</span><span class="cat-label">全部商品</span>' +
+                      '<span class="cat-count" id="node-all-count">—</span></div>';
       bindSidebarEvents();
     }
   }
@@ -219,7 +321,7 @@ export const DASHBOARD_SCRIPT = `
         document.getElementById('sort-select').value = 'updated';
         collapseAllBranches();
         loadBrands();
-        syncMonitorFiltersVisibility();
+        syncCategoryFiltersVisibility();
         fetchProducts();
       });
     }
@@ -232,7 +334,7 @@ export const DASHBOARD_SCRIPT = `
         category = catVal; subcategory = ''; brand = ''; page = 1;
         sort = 'updated';
         document.getElementById('sort-select').value = 'updated';
-        syncMonitorFiltersVisibility();
+        syncCategoryFiltersVisibility();
         fetchProducts();
 
         const branch = p.closest('.tree-branch');
@@ -564,7 +666,7 @@ export const DASHBOARD_SCRIPT = `
         if (allNode) allNode.classList.add('active');
         collapseAllBranches();
         loadBrands();
-        syncMonitorFiltersVisibility();
+        syncCategoryFiltersVisibility();
       }
       fetchProducts();
     }, 280);
@@ -572,21 +674,26 @@ export const DASHBOARD_SCRIPT = `
   function onSortChange() { sort = document.getElementById('sort-select').value; page = 1; fetchProducts(); }
 
   // ── Fetch Status ──
+  // 頂欄「商品總量」= 比價組合計（與側欄一致）；來源 productCount 只用於判定最後更新時間，不灌進總量。
   async function fetchStatus() {
     try {
-      const r = await fetch('/api/v1/sources');
-      const j = await r.json();
+      const [srcRes, catRes] = await Promise.all([
+        fetch('/api/v1/sources'),
+        fetch('/api/v1/categories'),
+      ]);
+      const j = await srcRes.json();
+      const catJ = await catRes.json();
+      if (catJ.success && Array.isArray(catJ.data)) {
+        setTotalGroups(catJ.data.reduce((s, item) => s + (item.count || 0), 0));
+      }
       if (!j.success) return;
-      let total = 0, latestTime = null;
+      let latestTime = null;
       j.data.forEach(s => {
-        total += s.productCount;
         if (s.lastScrapedAt) {
           const t = new Date(s.lastScrapedAt.includes('T') ? s.lastScrapedAt : s.lastScrapedAt.replace(' ', 'T') + 'Z');
           if (!latestTime || t > latestTime) latestTime = t;
         }
       });
-      document.getElementById('stat-total').textContent = total.toLocaleString() + ' 件';
-      totalProducts = total;
       if (latestTime) {
         lastUpdatedMs = latestTime.getTime();
         document.getElementById('stat-updated').textContent = latestTime.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
@@ -619,6 +726,11 @@ export const DASHBOARD_SCRIPT = `
     if (panel) params.set('panel', panel);
     if (refreshTier) params.set('refresh_tier', refreshTier);
     if (resolution) params.set('resolution', resolution);
+    if (mbForm) params.set('mb_form', mbForm);
+    if (mbDimm) params.set('mb_dimm', mbDimm);
+    if (mbWifi) params.set('mb_wifi', mbWifi);
+    if (mbDdr) params.set('mb_ddr', mbDdr);
+    if (mbLan) params.set('mb_lan', mbLan);
 
     try {
       const r = await fetch('/api/v1/products?' + params);
@@ -639,6 +751,7 @@ export const DASHBOARD_SCRIPT = `
     if (!groups.length) {
       let hint = '請嘗試不同的關鍵字或分類';
       if (panel || refreshTier || resolution) hint = '目前有螢幕面板／更新率／解析度篩選，可改回「全部」';
+      else if (mbForm || mbDimm || mbWifi || mbDdr || mbLan) hint = '目前有主機板規格篩選，可改回「全部」';
       else if (priceMin || priceMax) hint = '目前有價格區間篩選，可放寬最低／最高價';
       else if (multiOnly) hint = '目前篩選「只看跨店比價」，可關閉以顯示更多商品';
       el.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><p>找不到符合條件的商品</p><small>' + hint + '</small></div>';

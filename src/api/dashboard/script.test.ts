@@ -29,4 +29,18 @@ describe('Dashboard 側邊欄子分類樹', () => {
     expect(DASHBOARD_SCRIPT).toContain('SIDEBAR_ORDERS.monitorResolution');
     expect(DASHBOARD_SCRIPT).toContain('syncMonitorFiltersVisibility');
   });
+
+  it('主機板工具列 facet：板型／插槽／Wi-Fi／DDR／有線網', () => {
+    expect(DASHBOARD_SCRIPT).toContain('buildMotherboardFacetButtons');
+    expect(DASHBOARD_SCRIPT).toContain('bindMotherboardFilters');
+    expect(DASHBOARD_SCRIPT).toContain('syncMotherboardFiltersVisibility');
+    expect(DASHBOARD_SCRIPT).toContain('params.set(\'mb_form\'');
+    expect(DASHBOARD_SCRIPT).toContain('params.set(\'mb_dimm\'');
+    expect(DASHBOARD_SCRIPT).toContain('params.set(\'mb_wifi\'');
+    expect(DASHBOARD_SCRIPT).toContain('params.set(\'mb_ddr\'');
+    expect(DASHBOARD_SCRIPT).toContain('params.set(\'mb_lan\'');
+    // 排序表以 JSON 注入；orderKey 字串存取 SIDEBAR_ORDERS[orderKey]
+    expect(DASHBOARD_SCRIPT).toContain('"mbForm":');
+    expect(DASHBOARD_SCRIPT).toContain("orderKey: 'mbForm'");
+  });
 });

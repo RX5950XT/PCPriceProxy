@@ -1,6 +1,7 @@
 import { ProductCategory } from '../shared/types.js';
 import type { Product } from '../shared/types.js';
 import { CATEGORY_META, isDiyCategory } from '../shared/constants.js';
+import { enrichMonitorSpecFields } from '../enrichment/monitor-specs.js';
 import { extractBrand, extractKeyboardSwitch } from './normalizer.js';
 
 /**
@@ -574,6 +575,12 @@ export function isMonitorContaminated(name: string): boolean {
   if (/投影機|升降桌|電腦桌|電競桌|工作桌/i.test(name)) return true;
   if (/SCREENBAR|螢幕.{0,4}掛燈|非對稱照明|ERGO\s*ARM|洞洞板|收納架|滿\s*[\d,]+.*贈/i.test(name)) return true;
   if (/AA級均勻照明|超廣燈體|滿[^：:]{0,15}[：:]?\s*贈|顏色可混.{0,8}活動|LCD磁吸數位螢幕/i.test(name)) return true;
+  // 磁吸小 LCD／水冷頭外接螢幕模組（Trofeo Vision LCD 6.86" 等），非桌面顯示器
+  if (/Trofeo\s*Vision\s*LCD/i.test(name) && !/(?<!\d)(240|280|360|420)(?!\d)/.test(name)) return true;
+  if (/磁吸/.test(name) && /(?:數位顯示|數位螢幕|LCD)/i.test(name)
+      && /(?:6\.\d+\s*吋|1280\s*[x×*]\s*480|USB\s*(?:介面|9-?Pin))/i.test(name)) {
+    return true;
+  }
   // 螢幕支架／氣壓臂（Raymii / 銀欣 ARM…）：常寫「17-43吋／承載 KG」，不是顯示器本體
   if (/\bSST-?ARM|螢幕臂|氣壓彈簧|氣壓式|穿夾兩用|單螢幕\s*[\/／]|雙螢幕\s*[\/／]|最大支援\s*\d+\s*吋/i.test(name)) return true;
   if (/RAYMII|HALO-?MAX/i.test(name) && /承載|氣壓|穿夾|單螢幕|雙螢幕/i.test(name)) return true;
@@ -588,6 +595,10 @@ export function isMonitorContaminated(name: string): boolean {
   if (/\b\d(?:\.\d)?\s*吋.{0,20}(?:LCD|萬用螢幕|擴充螢幕)|(?:LCD|萬用螢幕|擴充螢幕).{0,20}\b\d(?:\.\d)?\s*吋/i.test(name)) return true;
   // 直播控制器（圓剛 NEXUS 等）上的小觸控屏不是桌面顯示器
   if (/直播控制器|NEXUS/i.test(name) && /觸控|旋鈕|直播|AX\d/i.test(name)) return true;
+  // 鍵盤／鍵帽上的小彩屏（AULA F108pro 1.14 吋）
+  if (/(?:鍵盤|鍵軸|光鍵|三模|收割者軸)/i.test(name) && /(?:吋|LCD|LED).{0,12}(?:螢幕|彩屏)|(?:螢幕|彩屏).{0,12}(?:吋|LCD)/i.test(name)) {
+    return true;
+  }
   // 促銷附贈列、訊號線
   if (/^↪/.test(name.trim())) return true;
   if (/螢幕訊號線|訊號線|公對公|公對母/.test(name) && /\b(?:VGA|HDMI|DP|DVI)\b/i.test(name)) return true;
@@ -1100,6 +1111,134 @@ function detectMotherboardSubcategory(name: string): string | null {
     return hierarchy(label, null);
   }
   return null;
+}
+
+/**
+ * 主機板板型（工具列 facet，不進側欄樹）。
+ * 優先品名明示 ATX/M-ATX/ITX；否則用晶片組後綴 M/I 推斷（B860M→M-ATX、Z890I→Mini-ITX）。
+ */
+export function detectMotherboardForm(name: string): string {
+  const upper = name.toUpperCase();
+  if (/\bE-?ATX\b|\bEEB\b|\bEATX\b/.test(upper)) return 'E-ATX';
+  if (/\bM-?ATX\b|\bMATX\b|MICRO-?ATX|µATX/.test(upper)) return 'M-ATX';
+  if (/\bMINI-?ITX\b|MINI\s*ITX|\bITX\b/.test(upper)) return 'Mini-ITX';
+  if (/\bATX\b/.test(upper)) return 'ATX';
+  // 型號後綴：B860M / H610M → mATX；Z890I / B650I / X870-I → ITX（不可把 B650E 的 E 當板型）
+  if (/\b(?:Z|B|H|X|A|W)\d{3}E?M\b/i.test(name)) return 'M-ATX';
+  if (/\b(?:Z|B|H|X|A|W)\d{3}E?I\b/i.test(name) || /-(?:I)\s+(?:GAMING|WIFI)/i.test(name)) return 'Mini-ITX';
+  return '未標示';
+}
+
+/** 記憶體插槽數。Mini-ITX 消費級一律 2 槽；其餘需品名明示（2xDIMM / 4DIMM / 8DIMM）。 */
+export function detectMotherboardDimm(name: string, form?: string): string {
+  if (/8\s*[xX×*]?\s*DIMM|8DIMM|八槽/i.test(name)) return '8 槽';
+  if (/4\s*[xX×*]?\s*DIMM|4DIMM|4\s*槽|四槽/i.test(name)) return '4 槽';
+  if (/2\s*[xX×*]?\s*DIMM|2DIMM|2\s*槽|兩槽|雙槽/i.test(name)) return '2 槽';
+  const resolvedForm = form ?? detectMotherboardForm(name);
+  if (resolvedForm === 'Mini-ITX') return '2 槽';
+  return '未標示';
+}
+
+/**
+ * Wi-Fi：有世代就標世代；僅 WIFI/無線 →「有 Wi-Fi」。
+ * 詳列 LAN＋相供電卻無無線字樣 →「無 Wi-Fi」；短品名缺訊 →「未標示」（不猜）。
+ */
+export function detectMotherboardWifi(name: string): string {
+  if (/WI-?FI\s*7|WIFI\s*7|WIFI7/i.test(name)) return 'Wi-Fi 7';
+  if (/WI-?FI\s*6E|WIFI\s*6E|WIFI6E/i.test(name)) return 'Wi-Fi 6E';
+  if (/WI-?FI\s*6(?!E)|WIFI\s*6(?!E)|WIFI6(?!E)/i.test(name)) return 'Wi-Fi 6';
+  // Gigabyte 等以 AX 後綴標 Wi-Fi 6（B860M MAX GAMING AX）
+  if (/\bAX\b/i.test(name) && !/ARGB/i.test(name)) return 'Wi-Fi 6';
+  if (/\bWIFI\b|\bWI-?FI\b|無線/i.test(name)) return '有 Wi-Fi';
+  // coolpc 詳列常有 Realtek/Intel Gb + 相供電；無無線＝無模組
+  if (/(?:Realtek|Intel)\s*[\d.]+\s*Gb|LAN\s*[\d.]+G|[\d.]+\s*Gb(?:E)?\b/i.test(name) && /相/.test(name)) {
+    return '無 Wi-Fi';
+  }
+  return '未標示';
+}
+
+/**
+ * LGA1700（12–14 代）才有 DDR4/DDR5 雙軌。台系通路慣例：
+ * - DDR4 SKU **幾乎必標** `D4` / `DDR4`（當促銷／區隔用）
+ * - 未標 D4 的中高階 B760/Z790／工作站 W680 → 當代預設 **DDR5**
+ * - 少數入門型號只出 DDR4、品名也不寫 D4 → 下列白名單
+ */
+const LGA1700_SILENT_DDR4: readonly RegExp[] = [
+  // Gigabyte 入門：B760M H / H V2 官方為 DDR4（不可用 \bH\b 以免吃到 HDV/HAX）
+  /\bB760M\s*H(?:\s*V2)?(?![A-Z0-9])/i,
+  // ASRock H610 入門：H610M-H2/M.2 無 D5 後綴者為 DDR4（D5 版會寫 D5）
+  /\bH610M-H2\b/i,
+  // ASRock 早期 H610 無 D5 標記者
+  /\bH610M-(?:HDV|HVS)(?:\/M\.2)?\b/i,
+];
+
+/**
+ * DDR 世代：品名明示 > 雙支援 COMBO > 平台推斷。
+ * 單一平台晶片組可定死；僅 LGA1700 需 D4 標示／型號白名單／預設 DDR5。
+ */
+export function detectMotherboardDdr(name: string): string {
+  // 雙支援（須先於單邊 D4/D5：避免「支援D4&D5」被 D4 先吃掉）
+  if (/D4\s*[&＆+/／]\s*D5|D5\s*[&＆+/／]\s*D4|支援\s*D4\s*[&＆].*D5|DDR4\s*[/／]\s*DDR5|COMBO\s*II/i.test(name)
+    && /D4|D5|DDR/i.test(name)) {
+    return 'DDR4/DDR5';
+  }
+  // 華擎 H610M COMBO II 文案「支援D4&D5記憶體」
+  if (/COMBO\s*II/i.test(name) && /H610/i.test(name)) return 'DDR4/DDR5';
+
+  if (/DDR4|\bD4\b/i.test(name)) return 'DDR4';
+  if (/DDR5|\bD5\b/i.test(name)) return 'DDR5';
+
+  const chipset = detectMotherboardChipset(name);
+  const socket = chipset ? CHIPSET_SOCKET[chipset] : null;
+
+  // 單一記憶體世代的平台：直接定案
+  if (socket === 'AMD AM5' || socket === 'Intel LGA1851' || socket === 'AMD sTR5'
+    || socket === 'AMD sWRX8' || socket === 'Intel LGA4677') {
+    return 'DDR5';
+  }
+  if (socket === 'AMD AM4' || socket === 'Intel LGA1200' || socket === 'Intel LGA1151'
+    || socket === 'Intel LGA1150') {
+    return 'DDR4';
+  }
+  if (/\bAM5\b/i.test(name) || /LGA\s?1851/i.test(name)) return 'DDR5';
+  if (/\bAM4\b/i.test(name) || /LGA\s?12\d{2}/i.test(name)) return 'DDR4';
+
+  // LGA1700（含 B760/Z790/H610/W680/B660/Z690 等）：雙軌
+  const isLga1700 = socket === 'Intel LGA1700'
+    || /LGA\s?1700/i.test(name)
+    || /\b(?:Z790|B760|H610|W680|B660|Z690|H670|B760M|Z790M)\b/i.test(name);
+  if (isLga1700) {
+    if (LGA1700_SILENT_DDR4.some(re => re.test(name))) return 'DDR4';
+    // 台系未標 D4 → 當代預設 DDR5（W680 工作站、B760/Z790 中高階皆然）
+    return 'DDR5';
+  }
+
+  return '未標示';
+}
+
+/** 有線網路最高速：10 > 2.5 > 5 > 1；2.5 必須先於 5（避免 2.5Gb 內「5Gb」子字串誤中）。 */
+export function detectMotherboardLan(name: string): string {
+  if (/10\s*G(?:b|be)?|10Gb|10G\s*LAN|LAN\s*10|2\*Intel\s*10G|Intel\s*10G/i.test(name)) return '10GbE';
+  if (/2\.5\s*G|2\.5Gb/i.test(name)) return '2.5GbE';
+  // 5Gb LAN（排除 BT 5.x；2.5 已先處理）
+  if (/LAN\s*5G|5G\s*LAN|LAN5G|(?<![.\d])5\s*Gb|Realtek\s*5Gb|5G\+Wi/i.test(name)) return '5GbE';
+  if (/\b1\s*G(?:b)?\s*(?:LAN)?|LAN\s*1G|Realtek\s*1Gb|\b1Gb(?:E)?\b/i.test(name)) return '1GbE';
+  return '未標示';
+}
+
+/**
+ * 主機板規格寫入 specs 供工具列篩選（不進 subcategory path）。
+ * 五欄必填：偵測不到寫「未標示」／「無 Wi-Fi」，保證 facet 可覆蓋。
+ */
+export function motherboardSpecFields(rawName: string): Record<string, string> {
+  const mbForm = detectMotherboardForm(rawName);
+  return {
+    mbForm,
+    mbDimm: detectMotherboardDimm(rawName, mbForm),
+    mbWifi: detectMotherboardWifi(rawName),
+    mbDdr: detectMotherboardDdr(rawName),
+    mbLan: detectMotherboardLan(rawName),
+  };
 }
 
 function detectRamSubcategory(name: string): string | null {
@@ -1680,10 +1819,52 @@ function detectMonitorRefreshTier(name: string): string | null {
   return '240Hz 以上';
 }
 
+/** 品名／型號是否暗示 2K/4K 以上（避免低吋 FHD 預設誤殺）。 */
+function monitorNameSuggestsHighRes(name: string): boolean {
+  if (/\b(?:4K|UHD|2K|QHD|WQHD|UWQHD|DQHD|5K|8K|6K)\b/i.test(name)) return true;
+  if (/3840|2160|2560\s*[x×]\s*1440|3440|5120/i.test(name)) return true;
+  // 型號 …U / …Q / …AQ / …CQ / AOC Q27 / Alienware
+  if (/\b(?:MAG|MPG|XG|PG|VG|XV|PA|SW|CS|MP|M|G|X)\s*\d{2,3}U[A-Z0-9]*/i.test(name)) return true;
+  if (/\b(?:MAG|MPG|XG|PG|VG|XV|PA|SW|CS|MP|M|G)\s*\d{2,3}Q[A-Z0-9]*/i.test(name)) return true;
+  // AQ 中綴（含 VA27AQ，勿只認 VG/XG/PG）
+  if (/\b(?:VG|XG|PG|VA|PA|XV)\s*\d{2}AQ/i.test(name)
+      || /\b(?:VG|XG|PG|VA|PA|XV)\d{2}AQ/i.test(name)
+      || /\bMAG\s*\d{0,3}CQ/i.test(name)) {
+    return true;
+  }
+  if (/\bQ2[47]\d|\bAW\d{4}|\bMP\d{3}[QU]/i.test(name) || /\bM\d{2}[QU]\b/i.test(name)) return true;
+  return false;
+}
+
+/**
+ * 27 吋辦公／PRO 主流仍是 FHD；有 Q/U 或電競高解析型號前綴則不預設。
+ */
+function isLikelyOffice27Fhd(name: string): boolean {
+  if (monitorNameSuggestsHighRes(name)) return false;
+  if (/\b(?:ROG|Swift|Strix|Odyssey|Predator\s*X|QD-?OLED|WOLED)\b/i.test(name)) return false;
+  // PRO MP / Modern MD / 辦公 VA·VP·VY·VZ·GW·BL·EK·KA·SA·SB·P/SE 系列
+  if (/\b(?:PRO\s*)?MP\d{3}(?![QU])/i.test(name)) return true;
+  if (/\b(?:MD|GW|BL|EK|KA|SA|SB|VY|VZ|VP|VS)\s*\d{3}/i.test(name)) return true;
+  // VA27 辦公 FHD；VA27AQ / VA27AQSE 有 AQ = 2K，不可進此分支
+  if (/\bVA\d{3}(?![A-Z]*Q)/i.test(name)
+      && !/\bVA\d{2}AQ/i.test(name)
+      && !/\b(?:TUF|Gaming|ROG)\b/i.test(name)) {
+    return true;
+  }
+  // 商用 DELL P/SE、Philips 無高解析標記
+  if (/\b(?:DELL\s*)?(?:P|SE)\d{4}/i.test(name)) return true;
+  // 有 IPS/VA/TN 且非明確電競高階型號字樣
+  if (/\b(?:IPS|VA|TN)\b/i.test(name)
+      && !/\b(?:MAG|MPG|XG|PG|TUF|ROG|Nitro|Odyssey|AGON|Predator)\b/i.test(name)) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * 解析度（僅寫 specs 供工具列篩選，不進側欄樹）。
- * 優先：像素尺寸 → 關鍵字；雙模（4K-144/FHD-288）以較高解析度為準。
- * 缺值回 null（不造「未標解析度」）。
+ * 優先：像素尺寸 → 關鍵字 → 吋數語意 → 型號 U/Q → 15–25 吋 FHD 預設 → 27 吋辦公 FHD。
+ * 缺值回 null；不做「全庫沒寫就 FHD」。
  */
 function detectMonitorResolution(name: string): string | null {
   // 帶魚 / 超寬像素（優先於泛用 2K/4K 關鍵字）
@@ -1701,16 +1882,97 @@ function detectMonitorResolution(name: string): string | null {
   if (/2560\s*[x×]\s*1440|2560X1440|\bQHD\+?\b|\bWQHD\b|\b2K\b|1440P/i.test(name)) return '2K / QHD';
   // FHD
   if (/1920\s*[x×]\s*1080|1920X1080|\bFHD\b|FULL\s*HD|1080P/i.test(name)) return 'FHD';
-  // 型號慣例（覆蓋率補強，僅在無明確像素時）：…U / UP 常 4K、…Q / QP 常 2K
-  // 限常見桌面電競前綴，避免誤殺
-  if (/\b(?:MAG|MPG|XG|PG|VG|XV|M|G|S|FO|MO|GO)\s*\d{2,3}U[A-Z0-9]*\b/i.test(name)
-      || /\bM\d{2}U[A-Z0-9]*\b/i.test(name)) {
+
+  // 吋數語意（無像素時）：49/57 帶魚、34 超寬（當前 DIY 幾乎皆 UWQHD）
+  const inch = detectMonitorInch(name);
+  if (inch === 49 || inch === 57) return '帶魚 (DQHD)';
+  if (inch === 34) return '超寬 (UWQHD)';
+
+  // 型號慣例：…U 常 4K、…Q／…AQ／…CQ 常 2K
+  if (/\bPD\s*49\b|\bPD49\b/i.test(name)) return '帶魚 (DQHD)';
+  // LG 27U511 / 32U731：U 在吋後 = 4K；PRO …UP / BenQ RD…U / Predator X32
+  if (/\b\d{2}U\d{3}[A-Z0-9-]*/i.test(name)) return '4K / UHD';
+  if (/\b\d{3}UP[A-Z0-9]*/i.test(name) || /\bRD\d{3}U\b/i.test(name)) return '4K / UHD';
+  if (/\bPE\d{3}QK/i.test(name) || /\bX32\b/i.test(name) && /\bOLED\b/i.test(name)) return '4K / UHD';
+  // 39/45 吋超寬 OLED 電競多為帶魚 DQHD
+  if (inch != null && (inch === 39 || inch === 45) && /\bOLED\b/i.test(name)) return '帶魚 (DQHD)';
+  // 可攜 14–16 吋無高解析標記 → FHD（已在 15–25 覆蓋；14 另補）
+  if (inch === 14 && !monitorNameSuggestsHighRes(name)) return 'FHD';
+  // Alienware：…Q = 4K，其餘 AW27xx 電競 OLED 多為 2K
+  if (/\bAW\d{4}Q\b/i.test(name)) return '4K / UHD';
+  if (/\bAW\d{4}[A-Z]*/i.test(name) || /\bAlienware\b/i.test(name)) return '2K / QHD';
+  // MAG …CUP = 4K 曲面；…CQ / CQF / CQPF = 2K 曲面
+  if (/\bMAG\s*\d{0,3}CUP[A-Z0-9]*/i.test(name) || /\b\d{3}CUP[A-Z0-9]*/i.test(name)) {
     return '4K / UHD';
   }
-  if (/\b(?:MAG|MPG|XG|PG|VG|XV|M|G|S|FO|MO|GO)\s*\d{2,3}Q[A-Z0-9]*\b/i.test(name)
-      || /\bM\d{2}Q[A-Z0-9]*\b/i.test(name)) {
+  if (/\bMAG\s*\d{0,3}CQ[A-Z0-9]*/i.test(name)
+      || /\bMAG\s*32\s*CQ[A-Z0-9]*/i.test(name)
+      || /\b\d{2,3}CQ[FP]/i.test(name)) {
     return '2K / QHD';
   }
+  // ASUS：VG/XG/PG/VA*AQ*（AQ 中綴 = WQHD；含 VA27AQ，勿漏給 27 吋辦公 FHD）
+  if (/\b(?:VG|XG|PG|VA|PA|XV)\s*\d{2}AQ[A-Z0-9]*/i.test(name)
+      || /\b(?:VG|XG|PG|VA|PA|XV)\d{2}AQ[A-Z0-9]*/i.test(name)) {
+    return '2K / QHD';
+  }
+  // AOC Q27* / Q32* 前綴 Q = QHD
+  if (/\bQ2[47]\d[A-Z0-9]*/i.test(name) || /\bQ32[A-Z0-9]*/i.test(name)) return '2K / QHD';
+  // ROG XG27AC*（ACS/ACSW/ACMG…）主流 2K
+  if (/\bXG\s*\d{2}AC[A-Z0-9]*/i.test(name) || /\bXG\d{2}AC[A-Z0-9]*/i.test(name)) {
+    return '2K / QHD';
+  }
+  // XG32WC* 曲面 2K；XG27WC* 曲面 2K
+  if (/\bXG\s*\d{2}WC[A-Z0-9]*/i.test(name) || /\bXG\d{2}WC[A-Z0-9]*/i.test(name)) {
+    return '2K / QHD';
+  }
+
+  if (/\bPA\d{2}U[A-Z0-9]*/i.test(name) || /\bSW\d{3}U[A-Z0-9]*/i.test(name)) return '4K / UHD';
+  if (/\b(?:MAG|MPG|XG|PG|VG|XV|PA|SW|CS|PD|FO|MO|GO|EV|VG)\s*\d{2,3}U[A-Z0-9]*\b/i.test(name)
+      || /\bM\d{2}U[A-Z0-9]*\b/i.test(name)
+      || /\bG\d{2,3}U[A-Z0-9]*\b/i.test(name)
+      || /\bX\d{2}U[A-Z0-9]*\b/i.test(name)
+      || /\bMP\d{3}U/i.test(name)) {
+    return '4K / UHD';
+  }
+  // MAG/G …F：24–27 吋 F 後綴常見 FHD（排除 CQ/Q）
+  if (/\bMAG\s*2[457]\d(?![A-Z]*Q)[A-Z]*F\b/i.test(name) || /\bG24\d[A-Z]*\b/i.test(name)) {
+    return 'FHD';
+  }
+  if (/\b(?:MAG|MPG|XG|PG|VG|XV|PA|SW|CS|FO|MO|GO|EV|MP)\s*\d{2,3}Q[A-Z0-9]*\b/i.test(name)
+      || /\bM\d{2}Q[A-Z0-9]*\b/i.test(name)
+      || /\bG\d{2,3}Q[A-Z0-9]*\b/i.test(name)
+      || /\bMP\d{3}Q/i.test(name)) {
+    return '2K / QHD';
+  }
+
+  // Acer／電競：…U 在 27 吋常為 WQHD（非 4K）；…Q 亦 2K
+  if (/\b(?:KG|XB|XV|VG|ED|GA|SG)\d{3}U[A-Z0-9]*/i.test(name)
+      || /\bEX\d{3}Q[A-Z0-9]*/i.test(name)
+      || /\bEX\d{3}U[A-Z0-9]*/i.test(name)
+      || /\bED27\dU/i.test(name)) {
+    return '2K / QHD';
+  }
+  // Nitro ED27 無 U/Q 後綴 → 曲面 FHD 為主
+  if (/\bED27\d(?![QU])/i.test(name)) return 'FHD';
+  // Odyssey G5 曲面 CG 系列多 FHD；DG/FG8 OLED 多 2K
+  if (/\bS\d{2}CG\d/i.test(name)) return 'FHD';
+  if (/\bS\d{2}(?:DG|FG8|HG8|FG6)\d/i.test(name)) return '2K / QHD';
+
+  // 15–25 吋：無高解析標記 → FHD（台灣 DIY 通路此吋段幾乎全 FHD）
+  if (inch != null && inch >= 15 && inch <= 25 && !monitorNameSuggestsHighRes(name)) {
+    return 'FHD';
+  }
+  // 27 吋辦公／PRO：無 Q/U 高解析標記 → FHD
+  if (inch === 27 && isLikelyOffice27Fhd(name)) return 'FHD';
+  // 29 吋超寬常見 UWFHD（無像素時）
+  if (inch === 29 && !monitorNameSuggestsHighRes(name)) return '超寬 (UWFHD)';
+  // 32 吋辦公／智慧（無 U/Q/4K 標記）多數 FHD 或已由 4K 關鍵字吃掉
+  if (inch === 32 && !monitorNameSuggestsHighRes(name)
+      && /\b(?:IPS|VA|TN)\b/i.test(name)
+      && !/\b(?:MAG|MPG|XG|PG|ROG|Odyssey|Predator|OLED)\b/i.test(name)) {
+    return 'FHD';
+  }
+
   return null;
 }
 
@@ -1735,25 +1997,40 @@ function detectMonitorSubcategory(name: string): string | null {
 /**
  * 從品名抽出螢幕面板／更新率／解析度，寫入 specs 供 API filter。
  * **三欄必填**：偵測不到時寫「未標示」，保證 facet 選項可覆蓋全庫、無漏網值。
- * （與側欄尺寸／品牌不同：尺寸一定有桶；這三維資料來源常省略。）
+ * L0 品名規則後，L1 本地 catalog 只填仍為「未標示」的欄（見 enrichment/monitor-specs）。
  */
 function monitorSpecFields(rawName: string): Record<string, string> {
-  return {
+  const fromName = {
     panel: detectMonitorPanel(rawName) ?? '未標示',
     refreshTier: detectMonitorRefreshTier(rawName) ?? '未標示',
     resolution: detectMonitorResolution(rawName) ?? '未標示',
   };
+  return enrichMonitorSpecFields(rawName, fromName);
 }
 
-/** 非螢幕時清掉 panel/refreshTier/resolution，避免重分類後殘留。 */
+/**
+ * 依分類寫入／清掉 facet specs，避免重分類後殘留錯誤維度。
+ * 螢幕：panel / refreshTier / resolution；主機板：mbForm / mbDimm / mbWifi / mbDdr / mbLan。
+ */
 function finalizeProductSpecs(
   product: Product,
   cat: ProductCategory,
   rawName: string,
 ): Record<string, string> {
-  const { panel: _p, refreshTier: _r, resolution: _res, ...base } = product.specs as Record<string, string>;
-  if (cat !== ProductCategory.MONITOR) return base;
-  return { ...base, ...monitorSpecFields(rawName) };
+  const {
+    panel: _p,
+    refreshTier: _r,
+    resolution: _res,
+    mbForm: _mf,
+    mbDimm: _md,
+    mbWifi: _mw,
+    mbDdr: _mddr,
+    mbLan: _ml,
+    ...base
+  } = product.specs as Record<string, string>;
+  if (cat === ProductCategory.MONITOR) return { ...base, ...monitorSpecFields(rawName) };
+  if (cat === ProductCategory.MOTHERBOARD) return { ...base, ...motherboardSpecFields(rawName) };
+  return base;
 }
 
 /**

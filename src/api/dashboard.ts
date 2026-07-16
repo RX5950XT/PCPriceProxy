@@ -32,7 +32,7 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
 
     <div class="header-stats" id="header-stats">
       <div class="stat">
-        <span class="stat-label">商品總量</span>
+        <span class="stat-label">比價組總量</span>
         <span class="stat-value" id="stat-total">—</span>
       </div>
       <div class="stat">
@@ -98,8 +98,8 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
         <option value="name">名稱排序</option>
       </select>
     </div>
-    <!-- 螢幕專用：面板／更新率正交篩選（僅 category=monitor 時顯示） -->
-    <div class="monitor-filters" id="monitor-filters" hidden>
+    <!-- 螢幕專用：面板／更新率／解析度（僅 category=monitor 時顯示） -->
+    <div class="category-filters" id="monitor-filters" hidden>
       <div class="facet-filter" id="panel-filter" title="面板材質">
         <span class="facet-label">面板</span>
         <button type="button" class="facet-btn active" data-panel="">全部</button>
@@ -111,6 +111,29 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
       <div class="facet-filter" id="resolution-filter" title="解析度">
         <span class="facet-label">解析度</span>
         <button type="button" class="facet-btn active" data-resolution="">全部</button>
+      </div>
+    </div>
+    <!-- 主機板專用：板型／插槽／Wi-Fi／DDR／有線網（僅 category=motherboard 時顯示） -->
+    <div class="category-filters" id="motherboard-filters" hidden>
+      <div class="facet-filter" id="mb-form-filter" title="板型尺寸">
+        <span class="facet-label">板型</span>
+        <button type="button" class="facet-btn active" data-mb-form="">全部</button>
+      </div>
+      <div class="facet-filter" id="mb-dimm-filter" title="記憶體插槽數">
+        <span class="facet-label">記憶體槽</span>
+        <button type="button" class="facet-btn active" data-mb-dimm="">全部</button>
+      </div>
+      <div class="facet-filter" id="mb-wifi-filter" title="無線網路">
+        <span class="facet-label">Wi-Fi</span>
+        <button type="button" class="facet-btn active" data-mb-wifi="">全部</button>
+      </div>
+      <div class="facet-filter" id="mb-ddr-filter" title="記憶體世代">
+        <span class="facet-label">記憶體</span>
+        <button type="button" class="facet-btn active" data-mb-ddr="">全部</button>
+      </div>
+      <div class="facet-filter" id="mb-lan-filter" title="有線網路">
+        <span class="facet-label">有線網</span>
+        <button type="button" class="facet-btn active" data-mb-lan="">全部</button>
       </div>
     </div>
 

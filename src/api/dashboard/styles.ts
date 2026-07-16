@@ -213,12 +213,12 @@ header {
 .price-clear.visible { display: block; }
 .price-clear:hover { color: var(--text); }
 
-/* ─── 螢幕專用 facet（面板／更新率） ─── */
-.monitor-filters {
+/* ─── 分類專用 facet（螢幕／主機板等，工具列上方） ─── */
+.category-filters {
   display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: stretch;
   margin-top: 0.55rem;
 }
-.monitor-filters[hidden] { display: none !important; }
+.category-filters[hidden] { display: none !important; }
 .facet-filter {
   display: flex; gap: 0; align-items: stretch;
   background: var(--panel); border: 1px solid var(--line); border-radius: 0;
@@ -297,6 +297,7 @@ header {
   font-size: 0.64rem; color: var(--faint);
   background: rgba(255,255,255,0.05); padding: 0.04rem 0.35rem;
 }
+.tree-node.active .cat-count,
 .tree-node-parent.active .cat-count { color: var(--accent-tint); background: rgba(53,201,224,0.16); }
 .chevron { width: 11px; height: 11px; color: var(--faint); transition: transform 0.15s; flex-shrink: 0; }
 
