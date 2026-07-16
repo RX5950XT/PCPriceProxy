@@ -98,6 +98,21 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
         <option value="name">名稱排序</option>
       </select>
     </div>
+    <!-- 螢幕專用：面板／更新率正交篩選（僅 category=monitor 時顯示） -->
+    <div class="monitor-filters" id="monitor-filters" hidden>
+      <div class="facet-filter" id="panel-filter" title="面板材質">
+        <span class="facet-label">面板</span>
+        <button type="button" class="facet-btn active" data-panel="">全部</button>
+      </div>
+      <div class="facet-filter" id="refresh-filter" title="更新率">
+        <span class="facet-label">更新率</span>
+        <button type="button" class="facet-btn active" data-refresh="">全部</button>
+      </div>
+      <div class="facet-filter" id="resolution-filter" title="解析度">
+        <span class="facet-label">解析度</span>
+        <button type="button" class="facet-btn active" data-resolution="">全部</button>
+      </div>
+    </div>
 
     <div class="results-header">
       <div>

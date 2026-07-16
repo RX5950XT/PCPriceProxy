@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareSubcategoryNode } from './subcategory-sort.js';
+import { compareSubcategoryNode, SIDEBAR_ORDERS } from './subcategory-sort.js';
 import { ProductCategory } from './types.js';
 
 function sorted(category: ProductCategory, values: string[]): string[] {
@@ -159,8 +159,10 @@ describe('compareSubcategoryNode', () => {
     expect(sorted(ProductCategory.HDD, ['企業級硬碟', '桌上型硬碟', 'NAS 專用碟', '監控碟'])).toEqual([
       '桌上型硬碟', 'NAS 專用碟', '監控碟', '企業級硬碟',
     ]);
-    expect(sorted(ProductCategory.NETWORK, ['交換器', '無線路由器', '網路卡 / 接收器'])).toEqual([
-      '無線路由器', '網路卡 / 接收器', '交換器',
+    expect(sorted(ProductCategory.NETWORK, [
+      '交換器', '無線路由器', '網路卡 / 接收器', 'Wi-Fi 延伸器', '無線基地台 / AP',
+    ])).toEqual([
+      '無線路由器', 'Wi-Fi 延伸器', '無線基地台 / AP', '網路卡 / 接收器', '交換器',
     ]);
     expect(sorted(ProductCategory.KEYBOARD, [
       '薄膜鍵盤 > 無線 > Logitech',
@@ -191,17 +193,32 @@ describe('compareSubcategoryNode', () => {
       '垂直滑鼠 > 無線 > Logitech',
       '一般滑鼠 > 無線 > Logitech',
     ]);
+    expect(sorted(ProductCategory.MONITOR, [
+      '大型顯示器 > 65吋 > Samsung',
+      '27吋 > ASUS',
+      '可攜 / 小尺寸 > 16吋 > Acer',
+      '34吋超寬 > MSI',
+      '24吋 > BenQ',
+    ])).toEqual([
+      '可攜 / 小尺寸 > 16吋 > Acer',
+      '24吋 > BenQ',
+      '27吋 > ASUS',
+      '34吋超寬 > MSI',
+      '大型顯示器 > 65吋 > Samsung',
+    ]);
     expect(sorted(ProductCategory.CASE, [
       'E-ATX > Lian Li > O11',
       'Mini-ITX > Cooler Master',
       'ATX > Thermaltake > View',
       'M-ATX > ASUS > Prime',
+      '機架式 / 工業 > SilverStone',
       '未標板型 > ASUS',
     ])).toEqual([
       'Mini-ITX > Cooler Master',
       'M-ATX > ASUS > Prime',
       'ATX > Thermaltake > View',
       'E-ATX > Lian Li > O11',
+      '機架式 / 工業 > SilverStone',
       '未標板型 > ASUS',
     ]);
     expect(sorted(ProductCategory.OS, ['應用軟體 > 防毒軟體', '作業系統 > Windows 11'])).toEqual([
@@ -210,8 +227,15 @@ describe('compareSubcategoryNode', () => {
     expect(sorted(ProductCategory.PACKAGE, ['搭購價單品 > CPU 處理器', '整機電腦 > ASUS', '零件組合 > CPU + 主機板'])).toEqual([
       '整機電腦 > ASUS', '零件組合 > CPU + 主機板', '搭購價單品 > CPU 處理器',
     ]);
-    expect(sorted(ProductCategory.MONITOR, ['FHD 1080p', '5K', '2K QHD', '4K UHD'])).toEqual([
-      '5K', '4K UHD', '2K QHD', 'FHD 1080p',
+    // 面板／Hz／解析度已退出側欄樹，排序表仍保留給 dashboard chip；未標示殿後保證全覆蓋
+    expect(SIDEBAR_ORDERS.monitorPanel).toEqual([
+      'QD-OLED', 'OLED', 'Mini-LED', '量子點', 'IPS', 'VA', 'TN', '未標示',
     ]);
+    expect(SIDEBAR_ORDERS.monitorRefresh[0]).toBe('240Hz 以上');
+    expect(SIDEBAR_ORDERS.monitorRefresh.at(-1)).toBe('未標示');
+    expect(SIDEBAR_ORDERS.monitorResolution).toContain('4K / UHD');
+    expect(SIDEBAR_ORDERS.monitorResolution).toContain('2K / QHD');
+    expect(SIDEBAR_ORDERS.monitorResolution).toContain('FHD');
+    expect(SIDEBAR_ORDERS.monitorResolution.at(-1)).toBe('未標示');
   });
 });

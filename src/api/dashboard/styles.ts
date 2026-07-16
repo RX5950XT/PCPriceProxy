@@ -213,6 +213,33 @@ header {
 .price-clear.visible { display: block; }
 .price-clear:hover { color: var(--text); }
 
+/* ─── 螢幕專用 facet（面板／更新率） ─── */
+.monitor-filters {
+  display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: stretch;
+  margin-top: 0.55rem;
+}
+.monitor-filters[hidden] { display: none !important; }
+.facet-filter {
+  display: flex; gap: 0; align-items: stretch;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0;
+  flex-wrap: wrap;
+}
+.facet-label {
+  display: flex; align-items: center;
+  padding: 0.45rem 0.65rem; font-size: 0.68rem; font-weight: 700;
+  color: var(--faint); letter-spacing: 0.04em; text-transform: uppercase;
+  border-right: 1px solid var(--line); white-space: nowrap; user-select: none;
+}
+.facet-btn {
+  padding: 0.45rem 0.65rem; border-radius: 0; font-size: 0.72rem;
+  border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted);
+  cursor: pointer; transition: all 0.14s; white-space: nowrap; font-weight: 600;
+  font-family: inherit;
+}
+.facet-btn:last-child { border-right: 0; }
+.facet-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+.facet-btn.active { color: var(--text); font-weight: 700; background: var(--panel2); box-shadow: inset 0 -2px 0 var(--accent); }
+
 /* ─── 通路篩選 ─── */
 .source-filter {
   display: flex; gap: 0; align-items: stretch;

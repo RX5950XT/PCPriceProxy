@@ -30,6 +30,12 @@ export interface ProductFilters {
   readonly category?: string;
   readonly brand?: string;
   readonly subcategory?: string;
+  /** 螢幕面板材質（specs.panel），僅 monitor 有意義 */
+  readonly panel?: string;
+  /** 螢幕更新率階（specs.refreshTier） */
+  readonly refreshTier?: string;
+  /** 螢幕解析度（specs.resolution） */
+  readonly resolution?: string;
   readonly priceMin?: number;
   readonly priceMax?: number;
   readonly inStock?: boolean;

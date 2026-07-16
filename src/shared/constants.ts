@@ -85,15 +85,20 @@ export const KNOWN_BRANDS = [
   'Apexgaming', 'TrendSonic', 'Infotec', 'Mavoly', 'i-COOLTW', 'TREETOP', 'ALL-IN', 'ZALMAN',
   'Ripple', 'BitFenix', 'EPONTEC', 'GAMEMAX', 'INFINITE', '1st Player', '電鎧',
   'Noctua', 'Arctic', 'DeepCool', 'ID-COOLING', 'Thermalright',
+  // 電源補充（中文別名在 BRAND_ALIASES）
+  'Delta',
   // 螢幕（GIGABYTE 已列於主機板段，勿在此重複大小寫變體）
-  'BenQ', 'ViewSonic', 'DELL', 'LG', 'Acer', 'AOC', 'Philips',
+  'BenQ', 'ViewSonic', 'DELL', 'LG', 'Acer', 'AOPEN', 'AOC', 'Philips',
   // 整機 / 筆電（HP 為 2 字，走詞邊界比對，不會誤中 HyperX）
   'HP', 'Lenovo', 'VAIO', 'Altos',
   // 周邊（鍵鼠）
   'Logitech', 'Razer', 'SteelSeries', 'HyperX', 'darkFlash',
   'i-Rocks', 'Cherry', 'Keychron', 'Rapoo', 'Havit', 'Turtle Beach', 'EndGame Gear', 'A4Tech', 'Ducky', 'AKKO', 'Pulsar', 'Lamzu', 'Fantech',
+  'Glorious', 'Ktnet',
   // AULA 的中文名「狼蛛」不列為別名：Razer Ornata 中文名亦為「雨林狼蛛」，會誤判品牌
   'AULA',
+  // 儲存小廠
+  'UMAX', 'Biwin',
   // 音訊（耳機 / 喇叭 / 音響）
   'EPOS', 'Edifier', 'Pioneer', 'AIWA', 'ATake', 'Creative', 'Sony', 'JBL', 'Bose', 'Klipsch', 'Audio-Technica', 'Sennheiser', 'Yamaha', 'i.shock',
   // 網通（ASUS 已列於主機板段，不重複）
@@ -154,6 +159,14 @@ export const BRAND_ALIASES: Record<string, string> = {
   '亞碩': 'Power Master',
   '銀欣': 'SilverStone',
   '全漢': 'FSP',
+  '海韻': 'Seasonic',
+  '台達': 'Delta',
+  'DELTA': 'Delta',
+  '利民': 'Thermalright',
+  '佰維': 'Biwin',
+  'BIWIN': 'Biwin',
+  '廣鐸': 'Ktnet',
+  'KTNET': 'Ktnet',
   '振華': 'Super Flower',
   '富鈞': 'XIGMATEK',
   '美洲獅': 'Cougar',

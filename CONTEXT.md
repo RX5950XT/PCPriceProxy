@@ -3,14 +3,47 @@
 ## 專案現況
 PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。
 
-## 系統運作狀態（已驗證，2026-07-15）
-資料流：scrape → normalize → categorize → **diy-filter** → **ingest（upsert + 汰除孤兒列）** → match → `products` / `match_groups`。`npm run test` **124 tests**、audit / build 通過。
+## 系統運作狀態（已驗證，2026-07-16）
+資料流：scrape → normalize → categorize → **diy-filter** → **ingest（upsert + 汰除孤兒列）** → match → `products` / `match_groups`。`npm run test` **141 tests**、audit 32 PASS、build 通過。
+
+### 第三十輪重點（散熱全類複驗 + AIO／高度／配件）
+- **AIO 漏判**：`\bLiquid\b` 吃不到 MasterLiquid／CoreLiquid；LC／Frozen／冷頭無「水冷」字；HydroShift／Panorama 裸排亦漏。
+- **高度**：裸 `360mm` 當塔高 → 假 `161mm 以上`；改**只信「高／高度 N」**（含 `高度15.6`）。
+- **分體水冷配件**：水冷液／G1/4／接頭／水箱／SWAFAN 曾落 AIO 未標 → `散熱膏/配件 > 分體水冷配件`（**須先於** AIO 判定）。
+- **雜訊**：筆電 NotePal 散熱墊 → `isCoolerContaminated` 不入庫；COUGAR Unity 純扇不進 AIO。
+- **庫內（rebuild 後）**：AIO 561／單塔 320／雙塔 179／下吹 57／配件 104；空冷↔AIO 交叉漏=0；分體件在 AIO=0；161 全有「高」。
+- **螢幕下一步（未實作）**：L0 品名規則 → L1 本地 model catalog → L2 非同步 Spec Enricher（可插拔 web）；不阻塞 scrape；低信心不覆寫品名已抽值。解析度未標示主因是通路省略 FHD，不可全庫猜 FHD。
+
+### 散熱側欄結構（現行）
+- `一體式水冷 (AIO) > 240/280/360/420mm > ARGB|RGB|無光`
+- `單塔|雙塔|下吹空冷 > 100mm 以下|101–150|151–160|161mm 以上 > 燈效`
+- `散熱膏/配件`（含 M.2 散熱、分體水冷配件）
+
+### 第二十九輪重點（機殼「未標板型」清光）
+- **原則**：未標是誠實缺口標籤；只回收高信心或清雜訊，不瞎猜規格。
+- **結果**：`未標板型` **41→0**；新增第一層 **`機架式 / 工業`**（30）；ATX/M-ATX/E-ATX/Mini-ITX 照常。
+- **處置**：USB 模組/HUB/垂直支架/機殼專用配件 → 踢出；RYUO 等 AIO 相容說明含「機殼」→ COOLER；機殼+海韻 Focus GX-850／+NX400／+LC 360 促銷 → PACKAGE；`CASE_FORM_BY_SERIES` 回填 AP201/202/303、MOTI Mini、C5 Curve、GT502、PRO FORGE M051。
+- **陷阱**：「內含 SFX 850W+120mm 水冷」不可當 A+B；配件判定不可用「顏色…機殼」寬鬆 pattern（`《白》(機殼專用)` 誤放行）。
+
+### 第二十八輪重點（喇叭側欄：型態 > 品牌）
+- 由 `品牌 > 有線/無線` 改為 **`型態 > 品牌`**：`2.0 桌面／書架`（18）/ `便攜藍牙`（11）/ `聲霸`（3）/ `重低音（單顆）`（2）/ `2.1／多件式`（2）；`其他喇叭`=0。
+- 有線／藍牙不當主軸（雙模常見）；`藍芽`＝`藍牙`；Nommo／天狼星歸 2.0 非單顆重低音。
+- `SIDEBAR_ORDERS.speakerType` + client `semanticRank`；`detectSpeakerForm` 優先序：聲霸 → 重低音單顆 → 2.1 → 2.0 → 便攜 → 其他。
+
+### 第二十七輪重點（全分類：漏分類 vs 雜訊）
+- **A 雜訊**：機殼誤入 MB/CPU→CASE；風扇純控制器/HUB/線踢出；網通軌跡球/↪/IoT 閘道；M.2 SSD 片→`散熱膏/配件 > M.2 散熱`；Strimer CPU 發光線踢出。
+- **B 缺口**：網通拆 Wi-Fi 延伸器／AP／交換器（其他 194→127）；散熱缺尺寸→`未標尺寸`；PSU→`未標瓦數`；CPU Xeon 工作站＋其他／舊款；品牌別名海韻/台達/利民/佰維/UMAX/Glorious/Ktnet。
+- **驗證**：test 137、rebuild、audit 32 PASS；case-in-mb/cpu=0；empty_sub≈0。
+
+### 第二十六輪重點（螢幕：樹極淺 + 面板／Hz／解析度 facet + 型號回填吋）
+- 側欄 `尺寸 > 品牌`；facet 三欄必填（`未標示`）；型號回填吋。
+
+### 第二十五輪重點（螢幕側欄重規劃：淺樹、砍未標解析度）
+- 曾做 `尺寸 > 面板 > Hz > 品牌`；後由第二十六輪改 facet。
 
 ### 第二十三輪重點（機殼改「最大板型 > 品牌 > 系列」）
-- **DIY 直覺**：裝機先問「板子進不進得去」→ 側欄第一層改最大支援主機板板型：`Mini-ITX` / `M-ATX` / `ATX` / `E-ATX` / `未標板型`，其下才是品牌與系列。
-- 判定序：E-ATX → M-ATX → Mini-ITX → ATX；排序 `exactTopRank` 避免 `ATX` 誤中 `E-ATX`。
-- 順手清配件：支撐架 / 燈條套件 / `↪` 促銷列 → `isCaseContaminated` 不入庫。
-- 其他 DIY 指標（塔型、雙艙、網孔/全景、背插、顏色）可作後續第二層，本輪先落地相容性。
+- **DIY 直覺**：裝機先問「板子進不進得去」→ 側欄第一層最大板型（第二十九輪補 `機架式 / 工業`、系列回填、未標清光）。
+- 判定序／配件／組合細節見第二十九輪與 AGENTS 機殼條。
 
 ### 第二十二輪重點（滑鼠類型優先 + 線材細分 + 價格篩選）
 - **滑鼠**＝`用途 > 有線/無線 > 品牌`：`電競滑鼠` 364 / `一般滑鼠` 311 / `垂直滑鼠` 11；例 `電競滑鼠 > 無線 > Logitech`。

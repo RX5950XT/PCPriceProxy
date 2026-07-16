@@ -109,12 +109,26 @@ export class ProductRepository {
       params.category = filters.category;
     }
     if (filters.subcategory) {
-      conditions.push('subcategory = @subcategory');
+      // 前綴匹配：點「27吋」也含「27吋 > MSI」
+      conditions.push('(subcategory = @subcategory OR subcategory LIKE @subcategoryPrefix)');
       params.subcategory = filters.subcategory;
+      params.subcategoryPrefix = `${filters.subcategory} > %`;
     }
     if (filters.brand) {
       conditions.push('brand = @brand');
       params.brand = filters.brand;
+    }
+    if (filters.panel) {
+      conditions.push(`json_extract(specs, '$.panel') = @panel`);
+      params.panel = filters.panel;
+    }
+    if (filters.refreshTier) {
+      conditions.push(`json_extract(specs, '$.refreshTier') = @refreshTier`);
+      params.refreshTier = filters.refreshTier;
+    }
+    if (filters.resolution) {
+      conditions.push(`json_extract(specs, '$.resolution') = @resolution`);
+      params.resolution = filters.resolution;
     }
     if (filters.priceMin !== undefined) {
       conditions.push('price >= @priceMin');
@@ -355,8 +369,9 @@ export class ProductRepository {
       params.category = filters.category;
     }
     if (filters.subcategory) {
-      conditions.push('subcategory = @subcategory');
+      conditions.push('(subcategory = @subcategory OR subcategory LIKE @subcategoryPrefix)');
       params.subcategory = filters.subcategory;
+      params.subcategoryPrefix = `${filters.subcategory} > %`;
     }
     if (filters.brand) {
       conditions.push('brand = @brand');
@@ -377,6 +392,25 @@ export class ProductRepository {
     if (filters.source) {
       conditions.push('id IN (SELECT match_group_id FROM products WHERE source = @source)');
       params.source = filters.source;
+    }
+    // 面板／更新率存在 products.specs；match_groups 無此欄，走子查詢
+    if (filters.panel) {
+      conditions.push(
+        `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.panel') = @panel)`,
+      );
+      params.panel = filters.panel;
+    }
+    if (filters.refreshTier) {
+      conditions.push(
+        `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.refreshTier') = @refreshTier)`,
+      );
+      params.refreshTier = filters.refreshTier;
+    }
+    if (filters.resolution) {
+      conditions.push(
+        `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND json_extract(specs, '$.resolution') = @resolution)`,
+      );
+      params.resolution = filters.resolution;
     }
     if (filters.hasMultipleSources) {
       conditions.push('has_multiple_sources = 1');

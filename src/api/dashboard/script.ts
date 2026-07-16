@@ -20,6 +20,9 @@ export const DASHBOARD_SCRIPT = `
   let source = ''; // 通路篩選：''=全部 / coolpc / sinya / autobuy
   let priceMin = ''; // 最低價（字串，空＝不限）
   let priceMax = ''; // 最高價
+  let panel = ''; // 螢幕面板（specs.panel）
+  let refreshTier = ''; // 螢幕更新率階（specs.refreshTier）
+  let resolution = ''; // 螢幕解析度（specs.resolution）
   const PER_PAGE = 50;
   let searchTimer = null;
   let priceTimer = null;
@@ -36,11 +39,14 @@ export const DASHBOARD_SCRIPT = `
   // ── Init ──
   document.addEventListener('DOMContentLoaded', () => {
     buildSidebar();
+    buildMonitorFacetButtons();
     fetchStatus();
     fetchProducts();
     bindMultiToggle();
     bindSourceFilter();
     bindPriceFilter();
+    bindMonitorFilters();
+    syncMonitorFiltersVisibility();
   });
 
   function bindSourceFilter() {
@@ -55,6 +61,119 @@ export const DASHBOARD_SCRIPT = `
         fetchProducts();
       });
     });
+  }
+
+  function buildMonitorFacetButtons() {
+    const panelEl = document.getElementById('panel-filter');
+    const refreshEl = document.getElementById('refresh-filter');
+    const resolutionEl = document.getElementById('resolution-filter');
+    if (panelEl) {
+      const panels = SIDEBAR_ORDERS.monitorPanel || [];
+      panels.forEach(p => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'facet-btn';
+        btn.dataset.panel = p;
+        btn.textContent = p;
+        panelEl.appendChild(btn);
+      });
+    }
+    if (refreshEl) {
+      const tiers = SIDEBAR_ORDERS.monitorRefresh || [];
+      tiers.forEach(t => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'facet-btn';
+        btn.dataset.refresh = t;
+        btn.textContent = t;
+        refreshEl.appendChild(btn);
+      });
+    }
+    if (resolutionEl) {
+      const resList = SIDEBAR_ORDERS.monitorResolution || [];
+      resList.forEach(r => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'facet-btn';
+        btn.dataset.resolution = r;
+        btn.textContent = r;
+        resolutionEl.appendChild(btn);
+      });
+    }
+  }
+
+  function bindMonitorFilters() {
+    const panelEl = document.getElementById('panel-filter');
+    const refreshEl = document.getElementById('refresh-filter');
+    const resolutionEl = document.getElementById('resolution-filter');
+    if (panelEl) {
+      panelEl.querySelectorAll('.facet-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          panelEl.querySelectorAll('.facet-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          panel = btn.dataset.panel || '';
+          page = 1;
+          fetchProducts();
+        });
+      });
+    }
+    if (refreshEl) {
+      refreshEl.querySelectorAll('.facet-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          refreshEl.querySelectorAll('.facet-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          refreshTier = btn.dataset.refresh || '';
+          page = 1;
+          fetchProducts();
+        });
+      });
+    }
+    if (resolutionEl) {
+      resolutionEl.querySelectorAll('.facet-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          resolutionEl.querySelectorAll('.facet-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          resolution = btn.dataset.resolution || '';
+          page = 1;
+          fetchProducts();
+        });
+      });
+    }
+  }
+
+  function clearMonitorFilters() {
+    panel = '';
+    refreshTier = '';
+    resolution = '';
+    const panelEl = document.getElementById('panel-filter');
+    const refreshEl = document.getElementById('refresh-filter');
+    const resolutionEl = document.getElementById('resolution-filter');
+    if (panelEl) {
+      panelEl.querySelectorAll('.facet-btn').forEach(b => b.classList.remove('active'));
+      const all = panelEl.querySelector('.facet-btn[data-panel=""]');
+      if (all) all.classList.add('active');
+    }
+    if (refreshEl) {
+      refreshEl.querySelectorAll('.facet-btn').forEach(b => b.classList.remove('active'));
+      const all = refreshEl.querySelector('.facet-btn[data-refresh=""]');
+      if (all) all.classList.add('active');
+    }
+    if (resolutionEl) {
+      resolutionEl.querySelectorAll('.facet-btn').forEach(b => b.classList.remove('active'));
+      const all = resolutionEl.querySelector('.facet-btn[data-resolution=""]');
+      if (all) all.classList.add('active');
+    }
+  }
+
+  function syncMonitorFiltersVisibility() {
+    const el = document.getElementById('monitor-filters');
+    if (!el) return;
+    if (category === 'monitor') {
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+      if (panel || refreshTier || resolution) clearMonitorFilters();
+    }
   }
 
   function catLabel(c) { return (CAT_META[c] && CAT_META[c].label) || (c || '').toUpperCase(); }
@@ -100,6 +219,7 @@ export const DASHBOARD_SCRIPT = `
         document.getElementById('sort-select').value = 'updated';
         collapseAllBranches();
         loadBrands();
+        syncMonitorFiltersVisibility();
         fetchProducts();
       });
     }
@@ -112,6 +232,7 @@ export const DASHBOARD_SCRIPT = `
         category = catVal; subcategory = ''; brand = ''; page = 1;
         sort = 'updated';
         document.getElementById('sort-select').value = 'updated';
+        syncMonitorFiltersVisibility();
         fetchProducts();
 
         const branch = p.closest('.tree-branch');
@@ -206,9 +327,10 @@ export const DASHBOARD_SCRIPT = `
   // ── compareNodes：子分類語義排序 ──
   function compareNodes(cat, a, b) {
     const orderedRank = (label, order) => {
+      if (!label || !order || !order.length) return Number.MAX_SAFE_INTEGER;
       const upper = label.toUpperCase();
       for (let i = 0; i < order.length; i++) {
-        const item = order[i].toUpperCase();
+        const item = String(order[i]).toUpperCase();
         if (upper === item || upper.includes(item)) return i;
       }
       return Number.MAX_SAFE_INTEGER;
@@ -273,7 +395,17 @@ export const DASHBOARD_SCRIPT = `
       if (cat === 'cooler') {
         return layeredRank(label, [SIDEBAR_ORDERS.coolerType, SIDEBAR_ORDERS.coolerSize, SIDEBAR_ORDERS.lighting]);
       }
-      if (cat === 'monitor') return orderedRank(label, SIDEBAR_ORDERS.monitorResolution);
+      // 螢幕樹：尺寸 > 品牌（面板／Hz 走工具列 facet）
+      if (cat === 'monitor') {
+        return layeredRank(label, [SIDEBAR_ORDERS.monitorSize]);
+      }
+      if (cat === 'case') return orderedRank(label, SIDEBAR_ORDERS.caseForm);
+      if (cat === 'keyboard') {
+        return layeredRank(label, [SIDEBAR_ORDERS.keyboardType, SIDEBAR_ORDERS.keyboardSwitch, SIDEBAR_ORDERS.keyboardConn]);
+      }
+      if (cat === 'mouse') return layeredRank(label, [SIDEBAR_ORDERS.mouseType, SIDEBAR_ORDERS.keyboardConn]);
+      if (cat === 'headset') return orderedRank(label, SIDEBAR_ORDERS.headsetType);
+      if (cat === 'speaker') return orderedRank(label, SIDEBAR_ORDERS.speakerType);
       if (cat === 'os') {
         const t = orderedRank(label, SIDEBAR_ORDERS.osTop);
         const l = orderedRank(label, SIDEBAR_ORDERS.osLeaf);
@@ -333,8 +465,10 @@ export const DASHBOARD_SCRIPT = `
           let current = tree;
           parts.forEach((part, index) => {
             if (!current[part]) {
-              current[part] = { name: part, children: {}, count: 0, fullPath: parts.slice(0, index + 1).join(' > ') };
+              current[part] = { name: part, children: {}, count: 0, totalCount: 0, fullPath: parts.slice(0, index + 1).join(' > ') };
             }
+            // 累加子孫數量，讓中間層「全部 X」可用前綴匹配撈整桶
+            current[part].totalCount += item.count;
             if (index === parts.length - 1) current[part].count = item.count;
             current = current[part].children;
           });
@@ -347,14 +481,13 @@ export const DASHBOARD_SCRIPT = `
           sortedNodes.forEach(node => {
             const hasChildren = node.children && Object.keys(node.children).length > 0;
             if (hasChildren) {
-              // 若本層自身也是某些商品的終點，於展開內容首列加上可直接選取的「全部 X」
-              const selfLeaf = node.count > 0
-                ? '<div class="tree-sub-node" data-sub="' + escHtml(node.fullPath) + '"><span>全部 ' + escHtml(node.name) + '</span><span style="font-size:0.7rem;opacity:0.6;">(' + node.count + ')</span></div>'
-                : '';
+              // 中間層一律提供「全部 X」（API 子分類前綴匹配）；數量用子孫合計
+              const selfLeaf = '<div class="tree-sub-node" data-sub="' + escHtml(node.fullPath) + '"><span>全部 ' + escHtml(node.name) + '</span><span style="font-size:0.7rem;opacity:0.6;">(' + node.totalCount + ')</span></div>';
               // 內層分支預設收合，只在使用者點擊該節點時逐層展開。
               html += '<div class="tree-branch-inner">' +
                       '  <div class="tree-node-parent-inner">' +
                       '    <span>' + escHtml(node.name) + '</span>' +
+                      '    <span style="font-size:0.7rem;opacity:0.55;margin-left:auto;padding-right:0.35rem;">' + node.totalCount + '</span>' +
                       '    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>' +
                       '  </div>' +
                       '  <div class="tree-node-children-inner" style="display:none;">' +
@@ -431,6 +564,7 @@ export const DASHBOARD_SCRIPT = `
         if (allNode) allNode.classList.add('active');
         collapseAllBranches();
         loadBrands();
+        syncMonitorFiltersVisibility();
       }
       fetchProducts();
     }, 280);
@@ -482,6 +616,9 @@ export const DASHBOARD_SCRIPT = `
     if (source) params.set('source', source);
     if (priceMin !== '' && !Number.isNaN(Number(priceMin))) params.set('price_min', String(Number(priceMin)));
     if (priceMax !== '' && !Number.isNaN(Number(priceMax))) params.set('price_max', String(Number(priceMax)));
+    if (panel) params.set('panel', panel);
+    if (refreshTier) params.set('refresh_tier', refreshTier);
+    if (resolution) params.set('resolution', resolution);
 
     try {
       const r = await fetch('/api/v1/products?' + params);
@@ -501,7 +638,8 @@ export const DASHBOARD_SCRIPT = `
     const el = document.getElementById('product-list');
     if (!groups.length) {
       let hint = '請嘗試不同的關鍵字或分類';
-      if (priceMin || priceMax) hint = '目前有價格區間篩選，可放寬最低／最高價';
+      if (panel || refreshTier || resolution) hint = '目前有螢幕面板／更新率／解析度篩選，可改回「全部」';
+      else if (priceMin || priceMax) hint = '目前有價格區間篩選，可放寬最低／最高價';
       else if (multiOnly) hint = '目前篩選「只看跨店比價」，可關閉以顯示更多商品';
       el.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><p>找不到符合條件的商品</p><small>' + hint + '</small></div>';
       return;

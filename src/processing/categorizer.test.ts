@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bundleReason, categorizeProduct, gpuMatchKey, isRealBundle } from './categorizer.js';
+import { extractBrand } from './normalizer.js';
 import { ProductCategory } from '../shared/types.js';
 import type { Product } from '../shared/types.js';
 
@@ -169,7 +170,8 @@ describe('categorizeProduct 分類順序', () => {
     expect(ryzen9.subcategory).toBe('AMD > Ryzen 9000 (Zen5) > Ryzen 9');
     expect(shortRyzen7.subcategory).toBe('AMD > Ryzen 5000 (Zen3) > Ryzen 7');
     expect(threadripper.subcategory).toBe('AMD > Threadripper 7000');
-    expect(oldIntel.subcategory).toBe('Intel');
+    // 舊款不再裸「Intel」：落到明確「其他／舊款」桶（避免側欄無子節點）
+    expect(oldIntel.subcategory).toBe('Intel > 其他／舊款 > Core i7');
     expect(ultra.subcategory).toBe('Intel > Core Ultra 200S > Ultra 7');
     expect([ryzen9.subcategory, threadripper.subcategory, oldIntel.subcategory].join(' ')).not.toContain('高階');
     expect(oldIntel.subcategory).not.toContain('第 5 代');
@@ -380,13 +382,35 @@ describe('第十五輪：除污與品牌分類', () => {
     expect(itx.subcategory).toMatch(/^Mini-ITX > Cooler Master/);
   });
 
-  it('鍵盤＝機制 > 軸 > 有線/無線 > 品牌；喇叭仍品牌 > 類型', () => {
+  it('鍵盤＝機制 > 軸 > 有線/無線 > 品牌；喇叭＝型態 > 品牌', () => {
     const kb = categorizeProduct(makeProduct('keychron K8 Max 80% 三模機械鍵盤 鋁框 RGB Mac/Win 熱插拔 Super紅軸', ProductCategory.KEYBOARD));
     expect(kb.subcategory).toBe('機械式鍵盤 > 紅軸 > 無線 > Keychron');
     const membrane = categorizeProduct(makeProduct('羅技 Logitech K120 有線鍵盤 薄膜', ProductCategory.KEYBOARD));
     expect(membrane.subcategory).toBe('薄膜鍵盤 > 有線 > Logitech');
+    // 三音路書架型雙模 → 2.0（不當便攜、也不再品牌優先）
     const spk = categorizeProduct(makeProduct('漫步者Edifier R2750DB 三音路喇叭 /Bluetooth V4.', ProductCategory.SPEAKER));
-    expect(spk.subcategory).toBe('Edifier > 藍牙 / 無線喇叭');
+    expect(spk.subcategory).toBe('2.0 桌面／書架 > Edifier');
+  });
+
+  it('喇叭型態：2.0／2.1／聲霸／重低音／便攜；藍芽＝藍牙', () => {
+    const desk = categorizeProduct(makeProduct('漫步者Edifier R1280DB 2.0聲道藍牙喇叭 (藍牙無線+有線/二件式)', ProductCategory.SPEAKER));
+    expect(desk.subcategory).toBe('2.0 桌面／書架 > Edifier');
+    // 藍芽異體字仍應進 2.0（有 2.0 標示）
+    const blueya = categorizeProduct(makeProduct('Edifier 漫步者 G1000 II 2.0 電競藍芽喇叭 (黑色)', ProductCategory.SPEAKER));
+    expect(blueya.subcategory).toBe('2.0 桌面／書架 > Edifier');
+    const multi = categorizeProduct(makeProduct('羅技 Z625 2.1聲道 三件式喇叭/400W大功率輸出/THX專業認證', ProductCategory.SPEAKER));
+    expect(multi.subcategory).toBe('2.1／多件式 > Logitech');
+    const bar = categorizeProduct(makeProduct('雷蛇 Razer LEVIATHAN V2 Sound Bar 利維坦巨獸/有線/藍芽/兩件式重低音喇叭', ProductCategory.SPEAKER));
+    expect(bar.subcategory).toBe('聲霸 > Razer');
+    const sub = categorizeProduct(makeProduct('漫步者Edifier T5 主動式超重低音喇叭 /DSP數位音訊處理/70W', ProductCategory.SPEAKER));
+    expect(sub.subcategory).toBe('重低音（單顆） > Edifier');
+    const portable = categorizeProduct(makeProduct('AIWA 愛華 便攜式藍牙喇叭 BST-330 黑色', ProductCategory.SPEAKER));
+    expect(portable.subcategory).toBe('便攜藍牙 > AIWA');
+    const stream = categorizeProduct(makeProduct('EDIFIER ES300 藍牙串流喇叭 (黑色)', ProductCategory.SPEAKER));
+    expect(stream.subcategory).toBe('便攜藍牙 > Edifier');
+    // Nommo 系列品名常寫「重低音」但實為桌面全頻喇叭，不可落「其他」或單顆重低音
+    const nommo = categorizeProduct(makeProduct('雷蛇Razer Nommo V2 天狼星 重低音喇叭', ProductCategory.SPEAKER));
+    expect(nommo.subcategory).toBe('2.0 桌面／書架 > Razer');
   });
 
   it('耳機 / 麥克風＝連線或產品大類 > 品牌', () => {
@@ -509,6 +533,12 @@ describe('第十七輪：線材獨立分類、OS/軟體合併、光碟機移除'
   it('作業系統與應用軟體合併為同一分類，靠第一層區隔', () => {
     expect(cat('Microsoft Office 2024 家用版 中文盒裝').subcategory).toBe('應用軟體 > 辦公軟體');
     expect(cat('PC-cillin 2025 雲端版 12個月1台防護版', ProductCategory.OS).subcategory).toBe('應用軟體 > 防毒軟體');
+    // Office 相容註記「WIN10、MAC共用」不可誤吸成 Windows 10
+    expect(cat(
+      'Microsoft Office 2024 Home and Student 家用中文版/含Word、Excel、PowerPoint/WIN10、MAC共用',
+      ProductCategory.OS,
+    ).subcategory).toBe('應用軟體 > 辦公軟體');
+    expect(cat('Windows 11 Pro 中文專業隨機版 64位元', ProductCategory.OS).subcategory).toBe('作業系統 > Windows 11');
   });
 
   it('線材依大類 > 細類分層；沒有「線」字的接頭配對也要撈到', () => {
@@ -594,7 +624,9 @@ describe('第十八輪：側欄分類精度與節點收斂', () => {
     const monitor = categorizeProduct(makeProduct('MSI MAG 272F〈1H1P/IPS/200Hz〉', ProductCategory.MONITOR));
     const cable = categorizeProduct(makeProduct('廣鐸ktnet VGA公對公 螢幕專用線-1.5M/Y15F15F1.5BLCU', ProductCategory.MONITOR));
 
-    expect(monitor.subcategory).toBe('27吋');
+    expect(monitor.subcategory).toBe('27吋 > MSI');
+    expect(monitor.specs.panel).toBe('IPS');
+    expect(monitor.specs.refreshTier).toBe('170–240Hz');
     expect(cable.category).toBe(ProductCategory.CABLE);
     expect(cable.subcategory).toBe('影音線 > VGA');
   });
@@ -648,8 +680,178 @@ describe('第十八輪：側欄分類精度與節點收斂', () => {
     const aopen = categorizeProduct(makeProduct('AOPEN 22SA2Q H〈1A1H/VA/100Hz〉', ProductCategory.MONITOR));
     const terra = categorizeProduct(makeProduct('terra 2441W〈1A1H/IPS/含喇叭/144Hz〉', ProductCategory.MONITOR));
 
-    expect(aopen.subcategory).toBe('22吋');
+    expect(aopen.subcategory).toBe('22吋 > AOPEN');
+    expect(aopen.specs.panel).toBe('VA');
+    expect(aopen.specs.refreshTier).toBe('100Hz 以下');
     expect(terra.subcategory).toBe('24吋');
+    expect(terra.specs.panel).toBe('IPS');
+    expect(terra.specs.refreshTier).toBe('120–165Hz');
+  });
+
+  it('螢幕樹＝尺寸(超寬語意) > 品牌；面板／Hz 進 specs 不當 path', () => {
+    const gaming = categorizeProduct(makeProduct(
+      'ASUS ROG Strix XG27UQDMS 27吋 4K 240Hz 電競螢幕 QD-OLED',
+      ProductCategory.MONITOR,
+    ));
+    expect(gaming.subcategory).toBe('27吋 > ASUS');
+    expect(gaming.specs.panel).toBe('QD-OLED');
+    expect(gaming.specs.refreshTier).toBe('170–240Hz');
+    expect(gaming.subcategory).not.toMatch(/IPS|OLED|Hz|未標|4K|2K|解析度/);
+
+    const ultra = categorizeProduct(makeProduct(
+      '【34型】MSI MPG 341CQR QD-OLED X36 電競螢幕 (DP/HDMI/QD-OLED/曲面/3440X1440 (UWQHD)/21:9/0.03ms/360Hz)',
+      ProductCategory.MONITOR,
+    ));
+    expect(ultra.subcategory).toBe('34吋超寬 > MSI');
+    expect(ultra.specs.panel).toBe('QD-OLED');
+    expect(ultra.specs.refreshTier).toBe('240Hz 以上');
+
+    const portable = categorizeProduct(makeProduct(
+      'ACER 宏碁 PG161Q P 16型 IPS 可攜式螢幕',
+      ProductCategory.MONITOR,
+    ));
+    expect(portable.subcategory).toBe('可攜 / 小尺寸 > 16吋 > Acer');
+    expect(portable.specs.panel).toBe('IPS');
+
+    const large = categorizeProduct(makeProduct(
+      '三星 Odyssey Neo G9 57型 Mini LED 4K 240Hz 曲面電競螢幕',
+      ProductCategory.MONITOR,
+    ));
+    expect(large.subcategory).toBe('57吋帶魚 > Samsung');
+    expect(large.specs.panel).toBe('Mini-LED');
+    expect(large.specs.refreshTier).toBe('170–240Hz');
+
+    const superUw = categorizeProduct(makeProduct(
+      '【49型】MSI MPG 491CQP QD-OLED 電競螢幕 (DP/HDMI/QD-OLED/曲面/2.5K/0.03ms/144Hz)',
+      ProductCategory.MONITOR,
+    ));
+    expect(superUw.subcategory).toBe('49吋帶魚 > MSI');
+    expect(superUw.specs.panel).toBe('QD-OLED');
+    expect(superUw.specs.refreshTier).toBe('120–165Hz');
+  });
+
+  it('其他尺寸：先展開吋數再品牌，缺吋走未標吋數（品牌不與 28吋 同層）', () => {
+    const inch28 = categorizeProduct(makeProduct(
+      'BenQ MOBIUZ EX2710Q 28吋 IPS 電競螢幕 170Hz',
+      ProductCategory.MONITOR,
+    ));
+    // 28 非主流 L1，應進其他尺寸 > 28吋 > 品牌
+    expect(inch28.subcategory).toBe('其他尺寸 > 28吋 > BenQ');
+
+    const noInch = categorizeProduct(makeProduct(
+      '神秘品牌 電競螢幕 QD-OLED 240Hz HDR 無型號',
+      ProductCategory.MONITOR,
+    ));
+    expect(noInch.subcategory).toMatch(/^其他尺寸 > 未標吋數/);
+    // 嚴禁：其他尺寸 > 品牌（會與 28吋/40吋 混同層）
+    expect(noInch.subcategory).not.toMatch(/^其他尺寸 > (Acer|AOC|ASUS|MSI|BenQ|DELL|GIGABYTE)$/);
+  });
+
+  it('解析度寫入 specs 供篩選，不進 subcategory path', () => {
+    const uhd = categorizeProduct(makeProduct(
+      'ASUS ROG Strix XG27UQDMS 27吋 4K 240Hz 電競螢幕 QD-OLED',
+      ProductCategory.MONITOR,
+    ));
+    expect(uhd.specs.resolution).toBe('4K / UHD');
+    expect(uhd.subcategory).not.toContain('4K');
+
+    const qhd = categorizeProduct(makeProduct(
+      'MSI MAG 275QF E21〈2H1P/IPS/210Hz/HDR400〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(qhd.specs.resolution).toBe('2K / QHD');
+
+    const uw = categorizeProduct(makeProduct(
+      '【34型】MSI MPG 341CQR QD-OLED 電競螢幕 (3440X1440 (UWQHD)/21:9/360Hz)',
+      ProductCategory.MONITOR,
+    ));
+    expect(uw.specs.resolution).toBe('超寬 (UWQHD)');
+
+    const dual = categorizeProduct(makeProduct(
+      '技嘉 M27UP〈2H1P1C/IPS〉4K-160Hz/FHD-320Hz切換',
+      ProductCategory.MONITOR,
+    ));
+    expect(dual.specs.resolution).toBe('4K / UHD');
+  });
+
+  it('面板／Hz／解析度缺資料時寫未標示，三欄必有值且無選項外孤兒', () => {
+    // 辦公屏常見：有 IPS／無 Hz／無解析度
+    const office = categorizeProduct(makeProduct(
+      '華碩 VY229HE〈1A1H/IPS〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(office.specs.panel).toBe('IPS');
+    expect(office.specs.refreshTier).toBe('未標示');
+    expect(office.specs.resolution).toBe('未標示');
+
+    // 量子點非 OLED 不應落未標
+    const qd = categorizeProduct(makeProduct(
+      '技嘉 M27Q2 QD〈2H1P1C/量子點/200Hz/HDR400〉',
+      ProductCategory.MONITOR,
+    ));
+    expect(qd.specs.panel).toBe('量子點');
+    expect(qd.specs.refreshTier).toBe('170–240Hz');
+
+    // 三欄必存在
+    for (const key of ['panel', 'refreshTier', 'resolution'] as const) {
+      expect(office.specs[key]).toBeTruthy();
+      expect(qd.specs[key]).toBeTruthy();
+    }
+  });
+
+  it('未標吋數應由型號回填：M27UP / CS272 / X32 / EK271 / MA270 / PD34', () => {
+    const cases: Array<[string, string]> = [
+      ['技嘉 M27UP〈2H1P1C/IPS/含喇叭/HDR400/HDMI 2.1〉4K-160Hz/FHD-320Hz切換', '27吋'],
+      ['Acer CS272〈3H/IPS/含喇叭/HDR10/白色〉智慧螢幕.支援Airplay', '27吋'],
+      ['Acer Predator X32 X2〈2H1P/OLED/240Hz/含喇叭/HDR400/HDMI 2.1/無亮點〉', '32吋'],
+      ['ACER 宏碁 X32 X2 OLED 4K電競螢幕', '32吋'],
+      ['Acer EK271 P6〈1A1H/IPS/144Hz〉', '27吋'],
+      ['Acer EK220Q E3〈1A1H/IPS/100Hz〉', '22吋'],
+      ['Acer Predator X27U W2〈2H1P/OLED/240Hz/含喇叭/HDMI 2.1〉', '27吋'],
+      ['BenQ MA270U〈2H1C/IPS/含喇叭/HDR400〉', '27吋'],
+      ['BenQ MA320UP〈2H1C/IPS/含喇叭/HDR600/鏡面〉', '32吋'],
+      ['BenQ PV3200U〈3H1C/IPS/含喇叭/HDR400〉', '32吋'],
+      ['DELL P2426〈1H1P/IPS/100Hz/無亮點/四年保〉', '24吋'],
+      ['MSI PRO MAX 271PHW E14〈1H1P1C/IPS/144Hz/含喇叭/白色〉', '27吋'],
+      ['AOC AGON PD34〈2H1P1C/OLED曲面/1800R/240Hz/含喇叭/HDR400/HDMI 2.1〉', '34吋超寬'],
+      ['AOC AGON PD49〈2H1P1C/OLED曲面/1800R/240Hz/含喇叭/HDR400/HDMI 2.1〉', '49吋帶魚'],
+      ['技嘉 M28U〈2H1P1C/IPS/144Hz/含喇叭/HDR400/HDMI 2.1〉', '其他尺寸 > 28吋'],
+      ['華碩 VS207DF〈1A/TN〉', '可攜 / 小尺寸 > 20吋'],
+    ];
+    for (const [raw, expectPrefix] of cases) {
+      const p = categorizeProduct(makeProduct(raw, ProductCategory.MONITOR));
+      expect(p.category).toBe(ProductCategory.MONITOR);
+      expect(p.subcategory, raw).toMatch(new RegExp(`^${expectPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+      expect(p.subcategory, raw).not.toContain('未標吋數');
+    }
+  });
+
+  it('型號世代後綴 E14/E21/X24 不可蓋過主型號吋數', () => {
+    const e21 = categorizeProduct(makeProduct('MSI MAG 275QF E21〈2H1P/IPS/210Hz/HDR400〉', ProductCategory.MONITOR));
+    const e14 = categorizeProduct(makeProduct('MSI MAG 275UPD E14〈2H1P/IPS/含喇叭/HDMI 2.1〉4K-144Hz/FHD-288Hz切換', ProductCategory.MONITOR));
+    const x24 = categorizeProduct(makeProduct('MSI MAG 275CQDF X24〈2H1P/VA曲面/1500R/240Hz〉2K-240Hz/HD-400Hz 雙模式', ProductCategory.MONITOR));
+    const philips = categorizeProduct(makeProduct('PHILIPS 32E1N3100LA〈1A2H/VA/含喇叭〉', ProductCategory.MONITOR));
+    const dell = categorizeProduct(makeProduct('DELL P2425H〈1A1H1P/IPS/100Hz/無亮點/四年保〉可升降旋轉', ProductCategory.MONITOR));
+
+    expect(e21.subcategory).toMatch(/^27吋/);
+    expect(e21.specs.panel).toBe('IPS');
+    expect(e14.subcategory).toMatch(/^27吋/);
+    expect(x24.subcategory).toMatch(/^27吋/);
+    expect(x24.specs.panel).toBe('VA');
+    expect(philips.subcategory).toMatch(/^32吋/);
+    expect(dell.subcategory).toBe('24吋 > DELL');
+    expect(dell.specs.panel).toBe('IPS');
+    expect(dell.specs.refreshTier).toBe('100Hz 以下');
+  });
+
+  it('螢幕氣壓支架／穿夾臂／筆電架／筆電不是顯示器', () => {
+    const raymii = 'Raymii LS5U (單螢幕/穿夾兩用/高負重氣壓/17-43吋/承載18KG) $2,539↘, $1499 ◆ ★';
+    const silver = '銀欣 SST-ARM14 白色 (單螢幕 / 氣壓彈簧 / 穿夾兩用 / 最大49吋or20公斤)$2990↘, $1599 ◆ ★';
+    const stand = 'Raymii R17 六段式隨身折疊鋁合金筆電架 / 通用於17吋以下筆電 / 折疊式設計 / 銀色';
+    const laptop = 'HP OmniBook Ultra U7-356H/32G/1T/14吋/觸碰螢幕 流星金 14-KD0024TU';
+    for (const raw of [raymii, silver, stand, laptop]) {
+      expect(categorizeProduct(makeProduct(raw, ProductCategory.MONITOR)).category).not.toBe(ProductCategory.MONITOR);
+    }
   });
 
   it('沒有螢幕關鍵字的掛燈促銷列與磁吸 LCD 配件也要移除', () => {
@@ -670,6 +872,198 @@ describe('第十八輪：側欄分類精度與節點收斂', () => {
     expect(categorizeProduct(makeProduct(edison, ProductCategory.MOTHERBOARD)).category).toBe(ProductCategory.OTHER);
   });
 
+  it('機殼誤入主機板／CPU 來源要重判回 CASE', () => {
+    const mbCase = categorizeProduct(makeProduct(
+      'Phanteks 追風者 Evolv X2 黑 全景玻璃機殼 (ATX/Type-C/支援背插主板(限ATX)/顯卡380mm/塔散170mm)',
+      ProductCategory.MOTHERBOARD,
+    ));
+    const cpuCase = categorizeProduct(makeProduct(
+      'Montech X5 黑 顯卡長41/CPU高16.5/玻璃透側/顯卡支撐架/14cm*3前風扇/E-ATX',
+      ProductCategory.CPU,
+    ));
+    expect(mbCase.category).toBe(ProductCategory.CASE);
+    expect(cpuCase.category).toBe(ProductCategory.CASE);
+    expect(mbCase.subcategory).toMatch(/ATX|E-ATX|M-ATX|未標板型/);
+  });
+
+  it('風扇控制器／HUB／接頭不是系統風扇', () => {
+    const hub = categorizeProduct(makeProduct(
+      '聯力 Edge USB HUB 白(EG-HUB01W) USB*4+風扇PWM*6/PCIe 8-PIN供電',
+      ProductCategory.FAN,
+    ));
+    const ctrl = categorizeProduct(makeProduct(
+      'NZXT 風扇燈光控制器 3代 /5組RGB燈光+5組PWM',
+      ProductCategory.FAN,
+    ));
+    expect(hub.category).not.toBe(ProductCategory.FAN);
+    expect(ctrl.category).not.toBe(ProductCategory.FAN);
+  });
+
+  it('網通：交換器／延伸器／網卡從其他網通回收；軌跡球踢出', () => {
+    const sw = categorizeProduct(makeProduct(
+      'ZyXEL合勤 XGS1250-12【12埠】1Gb*8/10Gb*3(RJ45)/10Gb*1 SFP+',
+      ProductCategory.NETWORK,
+    ));
+    expect(sw.subcategory).toMatch(/^交換器/);
+
+    const ext = categorizeProduct(makeProduct(
+      'TP-LINK RE315 (AC1200 / Wi-Fi 5 / 訊號延伸器)',
+      ProductCategory.NETWORK,
+    ));
+    expect(ext.subcategory).toMatch(/^Wi-Fi 延伸器/);
+
+    const nic = categorizeProduct(makeProduct(
+      'TP-LINK Archer TX35U Plus (AX1800 / Wi-Fi 6 / USB3.0)',
+      ProductCategory.NETWORK,
+    ));
+    expect(nic.subcategory).toMatch(/^網路卡/);
+
+    const ball = categorizeProduct(makeProduct(
+      'Logitech 羅技 Ergo M575S 無線軌跡球(石墨黑)',
+      ProductCategory.NETWORK,
+    ));
+    expect(ball.category).not.toBe(ProductCategory.NETWORK);
+  });
+
+  it('M.2 SSD 散熱片歸配件；空冷缺高度寫未標尺寸', () => {
+    const m2 = categorizeProduct(makeProduct(
+      '利民 M.2 2280 TYPE A B SSD 固態硬碟散熱片/鋁合金/單雙面皆適用',
+      ProductCategory.COOLER,
+    ));
+    expect(m2.subcategory).toBe('散熱膏/配件 > M.2 散熱');
+
+    const bare = categorizeProduct(makeProduct(
+      'DeepCool AG400 單塔 CPU 散熱器 ARGB',
+      ProductCategory.COOLER,
+    ));
+    expect(bare.subcategory).toBe('單塔空冷 > 未標尺寸 > ARGB');
+  });
+
+  it('AIO 不可落空冷：MasterLiquid／LC／Frozen／CoreLiquid；高度只信「高」', () => {
+    const ml = categorizeProduct(makeProduct(
+      '酷碼 MasterLiquid 360 Atmos II LCD ARGB 黑色/2.1吋液晶/一體式風扇/6年【WXZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(ml.subcategory).toBe('一體式水冷 (AIO) > 360mm > ARGB');
+
+    const lc = categorizeProduct(makeProduct(
+      '華碩 TUF GAMING LC III 360 ARGB(黑) /一體式風扇/厚:5.36cm/6年【WXZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(lc.subcategory).toBe('一體式水冷 (AIO) > 360mm > ARGB');
+    // 厚:5.36cm 不可當塔高
+    expect(lc.subcategory).not.toMatch(/100mm|161mm|空冷/);
+
+    const core = categorizeProduct(makeProduct(
+      '微星 MAG CoreLiquid A13 360(黑) /預裝風扇/可換式上蓋/厚:5.2(註冊3+2年)【XZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(core.subcategory).toBe('一體式水冷 (AIO) > 360mm > 無光');
+
+    const frozen = categorizeProduct(makeProduct(
+      '利民 Frozen Warframe 360 SE BLACK ARGB /2吋可轉向磁吸液晶/5年【WXZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(frozen.subcategory).toBe('一體式水冷 (AIO) > 360mm > ARGB');
+
+    const liq = categorizeProduct(makeProduct(
+      '保銳 LIQMAXFLO 360 風晶凌 /內置6cm VRM風扇/38mm加厚冷排/厚:6.5/5年【WXZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(liq.subcategory).toMatch(/^一體式水冷 \(AIO\) > 360mm/);
+
+    const th = categorizeProduct(makeProduct(
+      '喬思伯 TH-240 黑色版 /A.RGB/溫度監控/一體式無限鏡風扇/厚:5.5cm/5年【WXZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(th.subcategory).toMatch(/^一體式水冷 \(AIO\) > 240mm/);
+
+    // 真雙塔高度：高16.8 → 161mm 以上（不是 360mm 誤判）
+    const d15 = categorizeProduct(makeProduct(
+      '貓頭鷹 NH-D15 /6導管/NF-A15 PWM風扇*2/雙塔/六年保/高16.8【WXZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(d15.subcategory).toBe('雙塔空冷 > 161mm 以上 > 無光');
+
+    // 360mm 冷排字樣但已是 AIO 時不可進空冷 161
+    const primeLc = categorizeProduct(makeProduct(
+      '華碩 Prime LC 240 ARGB (240mm/可替換無限鏡面冷頭/預先安裝ARGB風扇/一體式風扇/六年保固)',
+      ProductCategory.COOLER,
+    ));
+    expect(primeLc.subcategory).toBe('一體式水冷 (AIO) > 240mm > ARGB');
+
+    // 液態金屬 → 配件
+    const metal = categorizeProduct(makeProduct(
+      '利民 Thermalright Silver King 液態金屬膏/1公克/導熱係數 79W/mK【避免接觸鋁製品】',
+      ProductCategory.COOLER,
+    ));
+    expect(metal.subcategory).toBe('散熱膏/配件');
+
+    // 純系統風扇組：一體式風扇 + RPM，不可當 AIO
+    const unity = categorizeProduct(makeProduct(
+      'COUGAR Unity 240 ARGB 黑(正向) 一體式風扇/側邊燈效/2500RPM/PWM/三年保',
+      ProductCategory.COOLER,
+    ));
+    expect(unity.subcategory).not.toMatch(/一體式水冷/);
+
+    // HydroShift／Panorama：無「水冷」字也是 AIO；360N 可抽冷排
+    const hydro = categorizeProduct(makeProduct(
+      '聯力 HydroShift II OLED Curved 360N(黑) 裸排/風扇選購/6.67吋電動曲面液晶/6年【XZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(hydro.subcategory).toBe('一體式水冷 (AIO) > 360mm > 無光');
+
+    const pan = categorizeProduct(makeProduct(
+      'TRYX Panorama SE 240 ARGB 黑 /6.5曲面可旋轉螢幕/Asetek泵浦/6年【WXZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(pan.subcategory).toBe('一體式水冷 (AIO) > 240mm > ARGB');
+
+    // 高度15.6（無空白）可抽；分體水冷配件不進 AIO；筆電墊踢出
+    const nx = categorizeProduct(makeProduct(
+      'Montech NX400 ARGB 黑 4導管/高度15.6/FDB軸 28mm風壓扇【WXZ】',
+      ProductCategory.COOLER,
+    ));
+    expect(nx.subcategory).toBe('單塔空冷 > 151–160mm > ARGB');
+
+    const fluid = categorizeProduct(makeProduct(
+      '曜越 T1000 透明水冷液/1000ml(CL-W245)【共7種顏色請詢問】',
+      ProductCategory.COOLER,
+    ));
+    expect(fluid.subcategory).toBe('散熱膏/配件 > 分體水冷配件');
+
+    const fit = categorizeProduct(makeProduct(
+      '曜越 Pacific SF G1/4 公對母90度 水冷延伸管 白色',
+      ProductCategory.COOLER,
+    ));
+    expect(fit.subcategory).toBe('散熱膏/配件 > 分體水冷配件');
+
+    expect(categorizeProduct(makeProduct(
+      '酷碼 NotePal X150 Spectrum RGB散熱墊 /含USB*3,Type-C*1/支援 17吋',
+      ProductCategory.COOLER,
+    )).category).not.toBe(ProductCategory.COOLER);
+  });
+
+  it('Xeon 與舊款 Intel 不落裸 Intel 節點；品牌別名海韻／利民', () => {
+    const xeon = categorizeProduct(makeProduct(
+      'Intel Xeon w5-2455X 12核24緒 處理器《3.2Ghz/LGA4677》',
+      ProductCategory.CPU,
+    ));
+    expect(xeon.subcategory).toMatch(/^Intel > Xeon 工作站/);
+    expect(xeon.subcategory).toContain('W5');
+
+    const sea = categorizeProduct(makeProduct(
+      '海韻 S12III-500W 銅牌/智慧溫控風扇/5年保',
+      ProductCategory.PSU,
+    ));
+    // brand 由 normalizer.extractBrand 抽出（categorize 不覆寫 brand）
+    expect(extractBrand(sea.rawName)).toBe('Seasonic');
+    expect(sea.subcategory).toMatch(/600W 以下/);
+
+    expect(extractBrand('利民 Peerless Assassin 120 SE ARGB')).toBe('Thermalright');
+  });
+
+
   it('1st Player 與電鎧機殼落在板型 > 品牌', () => {
     const firstPlayer = categorizeProduct(makeProduct('1st Player SP7 黑 玻璃透側 ATX機殼', ProductCategory.CASE));
     const darkArmor = categorizeProduct(makeProduct('電鎧 DK104 A.RGB 玻璃透側 E-ATX電腦機殼', ProductCategory.CASE));
@@ -683,5 +1077,80 @@ describe('第十八輪：側欄分類精度與節點收斂', () => {
       .not.toBe(ProductCategory.CASE);
     expect(categorizeProduct(makeProduct('華碩 GT502 Horizon 機殼專用 ARGB(黑) 燈效套件 /磁吸式/二年保', ProductCategory.CASE)).category)
       .not.toBe(ProductCategory.CASE);
+  });
+
+  it('機殼：USB 模組／HUB／垂直支架／AIO 不可留 CASE；工業機架與系列回填板型', () => {
+    expect(categorizeProduct(makeProduct(
+      '聯力 O11DE-3X 黑 擴充USB模組(O11 Dynamic EVO RGB 機殼專用), $570 ◆ ★',
+      ProductCategory.CASE,
+    )).category).not.toBe(ProductCategory.CASE);
+
+    expect(categorizeProduct(makeProduct(
+      'LIAN LI 聯力 USB HUB《白》(PCIe 8PIN供電)-EDGE金牌750/850或一般機殼☆590元',
+      ProductCategory.CASE,
+    )).category).not.toBe(ProductCategory.CASE);
+
+    expect(categorizeProduct(makeProduct(
+      'darkFlash 大飛 GCB470 垂直顯卡支架《白》(DY470機殼專用)☆1590元',
+      ProductCategory.CASE,
+    )).category).not.toBe(ProductCategory.CASE);
+
+    const aio = categorizeProduct(makeProduct(
+      '華碩 ROG RYUO IV SLC 360 ARGB 龍王四代 短管版 (360mm/6.67″AMOLED曲面水冷頭/預裝風扇/12cm風扇*3/六年換新保固/漏液損壞賠償)【短管設計機殼上方需支援280&360】',
+      ProductCategory.CASE,
+    ));
+    expect(aio.category).toBe(ProductCategory.COOLER);
+
+    const rack = categorizeProduct(makeProduct(
+      '銀欣 SST-RM23-502 工業機殼 (2U雙5.25”托盤和USB 3.1 Gen 1介面的機架式工業儲存伺服器機殼)',
+      ProductCategory.CASE,
+    ));
+    expect(rack.category).toBe(ProductCategory.CASE);
+    expect(rack.subcategory).toMatch(/^機架式 \/ 工業/);
+
+    const treeTop = categorizeProduct(makeProduct('TREETOP 樹昌 TI-U402S 4U工業機殼☆3100元', ProductCategory.CASE));
+    expect(treeTop.subcategory).toMatch(/^機架式 \/ 工業/);
+
+    // 品名無板型 token → 系列回填
+    const ap201 = categorizeProduct(makeProduct('華碩 Prime AP201 黑 透側版 玻璃透側機殼', ProductCategory.CASE));
+    expect(ap201.category).toBe(ProductCategory.CASE);
+    expect(ap201.subcategory).toMatch(/^M-ATX/);
+
+    const moti = categorizeProduct(makeProduct('darkFlash MOTI Mini 鏡之小島 黑 全景玻璃機殼', ProductCategory.CASE));
+    expect(moti.subcategory).toMatch(/^Mini-ITX/);
+
+    const c5 = categorizeProduct(makeProduct(
+      'Antec 安鈦克【C5 Curve ARGB(B)】曲面全景玻璃透側 支援背插主機板《黑》(顯卡41/CPU高16)☆2990元',
+      ProductCategory.CASE,
+    ));
+    expect(c5.subcategory).toMatch(/^ATX/);
+
+    const forge = categorizeProduct(makeProduct('微星 PRO FORGE M051A 玻璃透側機殼', ProductCategory.CASE));
+    expect(forge.subcategory).toMatch(/^M-ATX/);
+  });
+
+  it('機殼+電源／散熱促銷（瓦數藏型號）歸 PACKAGE', () => {
+    const casePsu = categorizeProduct(makeProduct(
+      '【優惠促銷】華碩 Prime AP201 黑 透側版 玻璃透側機殼 +海韻 Focus GX-850',
+      ProductCategory.CASE,
+    ));
+    expect(casePsu.category).toBe(ProductCategory.PACKAGE);
+    expect(casePsu.subcategory).toBe('零件組合 > 機殼 + 電源');
+    expect(bundleReason(casePsu.rawName)).toBe('case-plus-psu');
+
+    const caseCooler = categorizeProduct(makeProduct(
+      '【優惠促銷】華碩 Prime AP303 黑 網狀版 電腦機殼+MONTECH NX400 ARGB',
+      ProductCategory.CASE,
+    ));
+    expect(caseCooler.category).toBe(ProductCategory.PACKAGE);
+    expect(caseCooler.subcategory).toBe('零件組合 > 散熱器 + 機殼');
+    expect(bundleReason(caseCooler.rawName)).toBe('case-plus-cooler');
+
+    const caseLc = categorizeProduct(makeProduct(
+      '【優惠促銷】華碩 Prime AP202 ARGB 黑 全景玻璃機殼+華碩 Prime LC 360 ARGB',
+      ProductCategory.CASE,
+    ));
+    expect(caseLc.category).toBe(ProductCategory.PACKAGE);
+    expect(caseLc.subcategory).toBe('零件組合 > 散熱器 + 機殼');
   });
 });

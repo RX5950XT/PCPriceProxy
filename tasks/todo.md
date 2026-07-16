@@ -1,16 +1,20 @@
-# PCPriceProxy — 第二十二輪：滑鼠 + 線材細分 + 價格篩選
+# PCPriceProxy — 第三十輪：散熱全類複驗 + 文件推送
 
-## 本輪目標
-- 滑鼠側欄改類型優先
-- 線材兩層細分
-- Dashboard 價格區間篩選
+## 完成
+- [x] AIO 判定／高度只信高／分體配件／筆電墊
+- [x] 全庫 cooler 稽核：交叉漏=0、分體不在 AIO、161 全有「高」
+- [x] AGENTS / CLAUDE / CONTEXT / README
+- [x] test 141 / rebuild / audit / build
 
-## 執行項目
-- [x] 滑鼠：`用途 > 有線/無線 > 品牌`
-- [x] 線材：`大類 > 細類`（HDMI / CAT.x / Type-C to C / 12VHPWR…）
-- [x] Dashboard `$最低–最高` 價格篩選（接 `price_min`/`price_max`）
-- [x] 測試 / rebuild / audit / 文件
+## 庫內 cooler
+| 類型 | 筆數 |
+|---|---|
+| AIO | 561 |
+| 單塔 | 320 |
+| 雙塔 | 179 |
+| 下吹 | 57 |
+| 配件 | 104 |
 
-## 回顧
-- API 本來就有 `price_min`/`price_max`，缺的是 UI。
-- 線材細分後 Type-C+DP Alt 從影音改回 USB，邏輯更正確。
+## 下一步（螢幕，未做）
+- M1：`spec_enrichment` + 本地 catalog 回填未標示 facet
+- M2：非同步 web Provider（可選）

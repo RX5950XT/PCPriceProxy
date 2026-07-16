@@ -64,10 +64,31 @@ export function isLaptopLike(name: string): boolean {
   return /\d{1,2}(?:\.\d)?\s*吋|筆電|筆記型|LAPTOP|電競筆|手提電腦/i.test(name);
 }
 
+/**
+ * 機殼本體簽章（非配件）。用於 CPU／主機板來源誤收機殼時強制重判。
+ * 例：Montech X5「顯卡長/CPU高」、Evolv X2「全景玻璃機殼」、VECTOR「側透玻璃機殼」。
+ */
+export function looksLikeCase(name: string): boolean {
+  if (isCaseContaminated(name)) return false;
+  if (/機殼|機箱/i.test(name)) return true;
+  if (/顯卡長|CPU高|U高|塔散\s*\d|全景玻璃|玻璃透側|玻璃側板|鷗翼式|側透玻璃/i.test(name)) return true;
+  // 無「機殼」二字但同時有板型 + 顯卡支撐／內建風扇等裝箱語意
+  if (/\b(?:E-?ATX|M-?ATX|MINI-?ITX|ITX|ATX)\b/i.test(name)
+      && /顯卡支撐|內建風扇|支援背插主板|可調顯卡支撐|玻璃透側|全景/i.test(name)) {
+    return true;
+  }
+  return false;
+}
+
 export function isCpuContaminated(name: string): boolean {
   const upper = name.toUpperCase();
   if (isLaptopLike(name)) return true; // 含吋數/筆電者為整機，非 CPU 本體
   if (looksLikeMotherboard(name)) return true;
+  if (looksLikeCase(name)) return true; // Montech X5 等機殼誤入 CPU 來源
+  // 聯力 Strimer 等 CPU 8-PIN 發光線／燈效配件
+  if (/發光線|STRIMER|燈效線|2\s*[×xX]\s*8-?PIN/i.test(name) && !/處理器|PROCESSOR|CORE\s*I|RYZEN|XEON/i.test(name)) {
+    return true;
+  }
   const excludes = [
     '筆電', '筆記型', 'LAPTOP', '掌機', 'CLAW', 'ALLY', 'DECK', 'Z1', 'Z2', 'RYZEN Z', 'NUC', 'MINI PC', '迷你電腦', '準系統',
     '工作站', '套裝電腦', 'AIO PC', '保護蓋', '扣具', '防彎', '散熱器', '水冷', '防彎扣具', '防壓框',
@@ -82,6 +103,7 @@ export function isMbContaminated(name: string): boolean {
   const upper = name.toUpperCase();
   // 主機板來源也會混入 24Pin 燈效延長線與 PCIe USB 擴充卡；這些品名雖寫「主機板」但不是板卡本體。
   if (/延長線|【PCI-?E[^】]*】|PCI-?E.{0,16}(?:USB\s*\d+G|TYPE-?C)|\bGALILEO\d*\b|\bEDISON\b.{0,20}\bARDUINO\b/i.test(name)) return true;
+  if (looksLikeCase(name)) return true; // 聯力／Phanteks 等機殼誤入主機板來源
   const excludes = [
     '轉接', '擴充', 'PCI-E to', 'E-key', 'M.2 to', '托盤', '支架', '相容', '僅支援', '燈效',
     '套件', '組合', '大全配', '螺絲', '天線', '擋板'
@@ -153,10 +175,22 @@ export function isHddContaminated(name: string): boolean {
 
 export function isCoolerContaminated(name: string): boolean {
   const upper = name.toUpperCase();
-  const excludes = [
-    '套裝PC', '主機', '顯示卡', '導熱貼', '機殼', '主機板', '扣具'
-  ];
-  return excludes.some(ex => upper.includes(ex));
+  // 導熱貼／扣具配件；不可裸列「機殼」——AIO 相容說明常寫「機殼上方需支援 360」
+  if (/導熱貼|相變導熱|扣具|防彎/i.test(name) && !/散熱器|水冷|\bAIO\b|塔散|冷排|冷頭/i.test(name)) {
+    return true;
+  }
+  if (/套裝PC|顯示卡|主機板/i.test(upper) && !/散熱器|水冷|\bAIO\b|塔散|冷排|冷頭/i.test(name)) {
+    return true;
+  }
+  // 機殼本體誤中 cooler 關鍵字：有裝箱尺寸、無散熱本體簽章
+  if (looksLikeCase(name) && !/水冷|一體式|\bAIO\b|冷頭|冷排|塔散|下吹式|導管|散熱器/i.test(name)) {
+    return true;
+  }
+  // 筆電散熱墊／架、網通散熱架：非桌機 CPU 散熱
+  if (/NotePal|散熱墊|筆電散熱|筆電支架|網通設備\s*散熱架|鋁合金.{0,12}筆電/i.test(name)) {
+    return true;
+  }
+  return false;
 }
 
 export function isPsuContaminated(name: string): boolean {
@@ -212,12 +246,29 @@ function looksLikeCable(name: string): boolean {
     /\bCAT\.?\s?[5-8][A-Z]?\b/i.test(name);
 }
 
+/**
+ * 機殼**本體**強訊號（配件放行門檻）。
+ * 不可用「顏色…機殼」寬鬆 pattern——`《白》(DY470機殼專用)` 會誤當本體。
+ */
+function hasCaseBodySignals(name: string): boolean {
+  return /顯卡長|CPU高|U高|塔散\s*\d|全景玻璃|玻璃透側|側透玻璃|鷗翼|內建風扇|玻璃側板|工業機殼|電腦機殼|網狀版|透側版|全景玻璃機殼|玻璃透側機殼/i.test(name)
+    || /\b(?:E-?ATX|M-?ATX|MINI-?ITX|\bITX\b|\bATX\b)\b/i.test(name);
+}
+
 export function isCaseContaminated(name: string): boolean {
   const upper = name.toUpperCase();
   // 掌機包 / 收納包
   if (/TRAVEL\s*CASE|ALLY|掌機|收納|保護包|保護套|防潑水|攜行包|包$/.test(upper)) return true;
-  // 機殼配件（支撐架、直立套件、燈條）不是機殼本體；促銷註記列（↪）也排除
-  if (/支撐架|直立套件|燈條套件|燈效套件|磁吸燈條/i.test(name)) return true;
+  // AIO／水冷本體：相容說明會寫「機殼上方需支援 360」，不可當機殼
+  if (/水冷頭|冷排|預裝風扇|一體式水冷|\bAIO\b|RYUO|龍王|龍神|WATERFORCE|鷹魂|飛鷹/i.test(name)
+      && /水冷|冷頭|冷排|\bAIO\b|散熱器|\d{3}\s*mm/i.test(name)
+      && !/顯卡長|CPU高|U高|玻璃透側|全景玻璃|工業機殼|網狀版|透側版/i.test(name)) {
+    return true;
+  }
+  // 獨立配件：需強本體訊號才放行（機殼常寫「內附顯卡支撐架」）
+  if (/支撐架|直立套件|燈條套件|燈效套件|磁吸燈條|垂直顯卡支架|顯卡支架|擴充\s*USB\s*模組|USB\s*模組|USB\s*HUB|\bHUB\b|機殼專用/i.test(name)) {
+    if (!hasCaseBodySignals(name)) return true;
+  }
   if (/^↪/.test(name.trim())) return true;
   return false;
 }
@@ -227,14 +278,21 @@ export function isKeyboardContaminated(name: string): boolean {
   return /電競椅|電競桌|升降桌|電腦桌|辦公椅|工學椅|沙發|椅墊|腳托|桌墊超值組/i.test(name);
 }
 
-/** FAN 來源常混入水冷、GPU（三風扇規格）、PSU、集線器/燈條/延長線等配件。 */
+/** FAN 來源常混入水冷、GPU（三風扇規格）、PSU、集線器/燈條/延長線/控制器等配件。 */
 export function isFanContaminated(name: string): boolean {
   if (/不含風扇|不附風扇|無風扇/.test(name)) return true;              // 盒裝 CPU 的「不含風扇」標示
   if (/水冷|一體式|\bAIO\b|下吹式|導管|塔散/i.test(name)) return true; // AIO 與 CPU 散熱器
   if (RE_GPU_MODEL.test(name)) return true; // 顯卡以「三風扇」規格誤中 FAN 關鍵字
   if (looksLikePsu(name)) return true;
   if (/集線器|延長線|串接線|排線|擴充線|燈條|燈效套件|支撐架|千斤頂|散熱膏|轉接/i.test(name)) return true;
+  // 控制器／HUB／接頭／連接線：落在「其他尺寸風扇」的主因（非風扇本體）
+  if (/控制器|無線控制器|燈光控制器|\bHUB\b|擴充USB|擴充模組|連接線|同步線|1轉3|訊號線|風扇專規接頭/i.test(name)) {
+    const hasFanBody = /風扇|反向扇|反葉扇|\bFAN\b/i.test(name)
+      && /(?<!\d)(?:80|92|120|140)(?!\d)|[89]\s*CM|1[24]\s*CM/i.test(name);
+    if (!hasFanBody) return true;
+  }
   if (/螢幕|LCD液晶/i.test(name) && !/風扇|\bFAN\b/i.test(name)) return true;
+  if (/^↪/.test(name.trim())) return true;
   return false;
 }
 
@@ -251,7 +309,18 @@ function looksLikeStandaloneFan(name: string): boolean {
 
 /** NETWORK 來源常混入印表機、無線充電座、無線耳麥、無線鍵鼠組、掌機、HDMI 線等「無線/Wi-Fi」誤中品。 */
 export function isNetworkContaminated(name: string): boolean {
-  return /印表機|複合機|事務機|連續供墨|充電座|充電盤|充電器|行動電源|耳機|耳麥|鍵鼠|鍵盤|滑鼠|遊戲鼠|掌機|ALLY|CLAW\s*A\d|HDMI|傳輸線|喇叭|聲霸|SOUNDBAR|擴音機|工作站|網路線|\bCAT\.?\s?[5-8]|SCREENBAR|螢幕.{0,4}掛燈/i.test(name);
+  if (/^↪/.test(name.trim())) return true;
+  // 軌跡球／滑鼠／鍵鼠不是網通（Logitech M575 等曾落「其他網通」）
+  if (/軌跡球|TRACKBALL|滑鼠|遊戲鼠|鍵鼠|鍵盤(?!托)/i.test(name)
+      && !/路由器|網卡|交換器|NAS|MESH|分享器/i.test(name)) {
+    return true;
+  }
+  // 純 IoT 紅外線閘道（無路由／交換／網卡簽章）不進 DIY 網通
+  if (/智慧紅外線|IoT\s*網關|紅外線.*閘道|閘道.*紅外線/i.test(name)
+      && !/路由|交換|網卡|MESH|分享器|NAS|EAP|Wi-?Fi\s*[56]/i.test(name)) {
+    return true;
+  }
+  return /印表機|複合機|事務機|連續供墨|充電座|充電盤|充電器|行動電源|耳機|耳麥|掌機|ALLY|CLAW\s*A\d|HDMI|傳輸線|喇叭|聲霸|SOUNDBAR|擴音機|工作站|網路線|\bCAT\.?\s?[5-8]|SCREENBAR|螢幕.{0,4}掛燈/i.test(name);
 }
 
 /**
@@ -385,9 +454,22 @@ export function bundleReason(name: string): string | null {
   // 3b. A+B：+ 後接「瓦數 + 80+牌」的電源（如 顯卡/主機板 + 海韻 750W 金牌）；cooler 的 230W 無牌不會中
   if (!isBuiltInPsu(name) &&
       /[+＋][^+＋]{0,30}\d{3,4}\s?W\b[^+＋]{0,12}(金牌|銅牌|白金|鈦金|銀牌|白牌)/i.test(cleaned)) return 'plus-psu-rated';
-  // 4. 機殼 + 電源 搭售：同時具備機殼與瓦數/電源訊號且有加號（須用中和後字串，否則「80+金牌 … 雙倉機殼專用 850W」電源單品會誤判）
+  // 先剝「內含/內附 …」本體規格，避免「內含 SFX 850W+120mm 水冷」被當 A+B
+  const withoutBuiltin = cleaned.replace(/[（(]內[附含][^）)]*[）)]/g, ' ');
+
+  // 4. 機殼 + 電源 搭售：同時具備機殼與瓦數/電源訊號且有加號
+  //    通路促銷常寫「機殼 + 海韻 Focus GX-850」——瓦數藏型號、不寫 W，故補 looksLikePsuModel
   if (!isBuiltInPsu(name) &&
-      /[+＋]/.test(cleaned) && /機殼|透側|玻璃側|全景玻璃/i.test(cleaned) && /電源|電供|\d{3,4}\s?W\b/i.test(cleaned)) return 'case-plus-psu';
+      /[+＋]/.test(withoutBuiltin) && /機殼|透側|玻璃側|全景玻璃|網狀版|透側版/i.test(withoutBuiltin)
+      && (/電源|電供|\d{3,4}\s?W\b/i.test(withoutBuiltin) || looksLikePsuModel(withoutBuiltin))) {
+    return 'case-plus-psu';
+  }
+  // 4b. 機殼 + 散熱：機殼在前、+ 後為水冷／塔散（「機殼+MONTECH NX400」「機殼+Prime LC 360」）
+  if (!isBuiltInPsu(name) &&
+      /[+＋]/.test(withoutBuiltin) && /機殼|透側|玻璃側|全景玻璃|網狀版|透側版/i.test(withoutBuiltin)
+      && /散熱器|水冷|\bAIO\b|冷排|冷頭|塔散|\bLC\s*\d{3}\b|\bNX\d{3}\b|WATERFORCE|龍王|RYUO|飛鷹|鷹魂/i.test(withoutBuiltin)) {
+    return 'case-plus-cooler';
+  }
   return null;
 }
 
@@ -492,15 +574,53 @@ export function isMonitorContaminated(name: string): boolean {
   if (/投影機|升降桌|電腦桌|電競桌|工作桌/i.test(name)) return true;
   if (/SCREENBAR|螢幕.{0,4}掛燈|非對稱照明|ERGO\s*ARM|洞洞板|收納架|滿\s*[\d,]+.*贈/i.test(name)) return true;
   if (/AA級均勻照明|超廣燈體|滿[^：:]{0,15}[：:]?\s*贈|顏色可混.{0,8}活動|LCD磁吸數位螢幕/i.test(name)) return true;
+  // 螢幕支架／氣壓臂（Raymii / 銀欣 ARM…）：常寫「17-43吋／承載 KG」，不是顯示器本體
+  if (/\bSST-?ARM|螢幕臂|氣壓彈簧|氣壓式|穿夾兩用|單螢幕\s*[\/／]|雙螢幕\s*[\/／]|最大支援\s*\d+\s*吋/i.test(name)) return true;
+  if (/RAYMII|HALO-?MAX/i.test(name) && /承載|氣壓|穿夾|單螢幕|雙螢幕/i.test(name)) return true;
+  // 筆電架／增高支架（常寫「適用 17 吋以下筆電」）
+  if (/筆電架|筆電支架|增高支架|折疊支架|鋁合金.*支架|支架.*筆電|通用於\s*\d+.*筆電|適用\d+(?:\.\d)?吋以下筆電/i.test(name)) return true;
+  // 筆電／筆電式工作站誤入螢幕來源（不可用裸 isLaptopLike：桌面螢幕也有「吋」）
+  if (/(?:筆電|筆記型|LAPTOP|OMNIBOOK|THINKPAD|ZENBOOK|VIVOBOOK|IDEAPAD|YOGA\s*\d|PAVILION|ENVY\s*\d|ZBOOK|INSPIRON|LATITUDE)/i.test(name)
+      && (RE_STORAGE.test(name) || RE_CPU_MODEL.test(name) || /\b\d{1,2}G\b.*(?:SSD|HDD|硬碟)|LPDDR/i.test(name))) {
+    return true;
+  }
   // 3.9/6/8.8 吋 LCD 是機殼擴充顯示模組，不是桌面螢幕。
   if (/\b\d(?:\.\d)?\s*吋.{0,20}(?:LCD|萬用螢幕|擴充螢幕)|(?:LCD|萬用螢幕|擴充螢幕).{0,20}\b\d(?:\.\d)?\s*吋/i.test(name)) return true;
+  // 直播控制器（圓剛 NEXUS 等）上的小觸控屏不是桌面顯示器
+  if (/直播控制器|NEXUS/i.test(name) && /觸控|旋鈕|直播|AX\d/i.test(name)) return true;
+  // 促銷附贈列、訊號線
+  if (/^↪/.test(name.trim())) return true;
+  if (/螢幕訊號線|訊號線|公對公|公對母/.test(name) && /\b(?:VGA|HDMI|DP|DVI)\b/i.test(name)) return true;
   if (looksLikeCable(name)) return true;
   const excludes = ['螢幕架', '螢幕支架', '螢幕掛燈', '增高架', '壁掛架', '機殼'];
   return excludes.some(ex => upper.includes(ex));
 }
 
 // 常見螢幕尺寸（吋）白名單，用於從型號數字推斷尺寸
-const MONITOR_SIZES = new Set([19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 31, 32, 34, 37, 38, 40, 42, 43, 45, 48, 49, 55, 57, 65]);
+const MONITOR_SIZES = new Set([14, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 31, 32, 34, 35, 37, 38, 39, 40, 42, 43, 45, 48, 49, 50, 55, 57, 65, 70, 75, 77, 85, 86]);
+/** DIY 主流桌面尺寸：第一層直接露出；其餘併入可攜／其他桶再展開。 */
+const MONITOR_MAINSTREAM_SIZES = new Set([22, 24, 25, 27, 32, 34, 49]);
+/**
+ * 型號世代後綴不可當吋數。
+ * - E14/E21：MSI 世代號
+ * - X14–X25：多為世代後綴（如 MAG 275… X24）；X27/X32 則是 Predator 等型號吋數
+ * - 其他單字母+1–2 位且非常見桌面吋：當雜訊
+ */
+function isMonitorGenSuffixToken(token: string): boolean {
+  if (/^E\d{1,2}$/i.test(token)) return true;
+  const x = token.match(/^X(\d{1,2})$/i);
+  if (x) {
+    const n = parseInt(x[1], 10);
+    return n >= 10 && n <= 25;
+  }
+  // 純「單字母 + 1–2 位」且數字不在螢幕吋白名單 → 雜訊（G2、V1…）
+  const one = token.match(/^([A-Z])(\d{1,2})$/i);
+  if (one) {
+    const n = parseInt(one[2], 10);
+    return !MONITOR_SIZES.has(n);
+  }
+  return false;
+}
 
 /**
  * Detect category from product name using keyword matching
@@ -901,10 +1021,21 @@ function detectCpuSubcategory(name: string): string | null {
   const upperName = name.toUpperCase();
 
   let brand: string | null = null;
-  if (upperName.includes('INTEL') || /CORE\s*(I[3579]|ULTRA)|PENTIUM|CELERON/i.test(name)) brand = 'Intel';
+  if (upperName.includes('INTEL') || /CORE\s*(I[3579]|ULTRA)|PENTIUM|CELERON|XEON|至強/i.test(name)) brand = 'Intel';
   else if (upperName.includes('AMD') || /RYZEN|THREADRIPPER|\bR[3579]\s*\d{4}/i.test(name)) brand = 'AMD';
 
-  const generation = detectCpuGeneration(name, brand);
+  // Xeon 工作站（W5/W7/W9…）不在 Core i 世代樹
+  if (brand === 'Intel' && /XEON|至強/i.test(name)) {
+    let series: string | null = null;
+    if (/\bW9\b|W9-/i.test(name)) series = 'W9';
+    else if (/\bW7\b|W7-/i.test(name)) series = 'W7';
+    else if (/\bW5\b|W5-/i.test(name)) series = 'W5';
+    else if (/\bW3\b|W3-/i.test(name)) series = 'W3';
+    else if (/\bE-\d/i.test(name)) series = 'E 系列';
+    return hierarchy('Intel', 'Xeon 工作站', series);
+  }
+
+  let generation = detectCpuGeneration(name, brand);
 
   let series: string | null = null;
   if (/Ultra\s*9/i.test(name)) series = 'Ultra 9';
@@ -919,6 +1050,10 @@ function detectCpuSubcategory(name: string): string | null {
   else if (/Ryzen\s*7|R7\b/i.test(name)) series = 'Ryzen 7';
   else if (/Ryzen\s*5|R5\b/i.test(name)) series = 'Ryzen 5';
   else if (/Ryzen\s*3|R3\b/i.test(name)) series = 'Ryzen 3';
+
+  // 舊款／無法分代：避免裸「Intel」無子節點
+  if (brand === 'Intel' && !generation) generation = '其他／舊款';
+  if (brand === 'AMD' && !generation) generation = '其他／舊款';
 
   return hierarchy(brand, generation, series);
 }
@@ -1014,9 +1149,13 @@ function detectSsdSubcategory(name: string): string | null {
   let cap: string | null = null;
   // 先剝 USB 頻寬（USB10G / USB3.2）再抽容量，避免外接介面數字被誤判為容量
   const capSource = name.replace(/USB\s*\d+(?:\.\d+)?\s*G?/gi, ' ');
-  const capMatch = capSource.match(/(\d+)\s*(GB|TB|G|T)(?=\s|$|\/|\b)/i);
+  const capMatch = capSource.match(/(\d+)\s*(GB|TB|G|T)(?=\s|$|\/|\b|【)/i)
+    // 緊接斜線規格：480GB/2.5吋、1TB/Gen4
+    ?? capSource.match(/(\d+)\s*(GB|TB|G|T)\s*[\/／]/i);
   if (capMatch) {
     cap = `${capMatch[1]}${capMatch[2].toUpperCase().startsWith('T') ? 'TB' : 'GB'}`;
+  } else {
+    cap = '未標容量';
   }
 
   if (type === 'M.2 NVMe SSD') {
@@ -1067,48 +1206,138 @@ function detectHddSubcategory(name: string): string | null {
   return hierarchy(type, size, cap, rpm);
 }
 
+/** 散熱膏／導熱片／液金等配件（非 CPU 塔／AIO 本體）。 */
+function isThermalPasteOrPad(name: string): boolean {
+  if (/\b(散熱膏|導熱膏|涼膏|熱膏|針筒|導熱貼)\b/i.test(name)) return true;
+  if (/散熱膏|導熱膏/i.test(name)) return true;
+  // 液態金屬／導熱片：無塔散／AIO 本體簽章才算配件
+  if (/液態金屬|Thermal\s*Pad|導熱片|導熱係數/i.test(name)
+      && !/散熱器|水冷|\bAIO\b|塔散|雙塔|空冷|冷頭|冷排|導管/i.test(name)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 分體水冷零件／水冷周邊（不是 AIO 整組）：接頭、水冷液、水箱、單顆冷頭、冷排扇等。
+ * 必須在 isAioCooler 之前判定（品名含「水冷」會被 AIO 規則吸走）。
+ */
+function isCustomLoopAccessory(name: string): boolean {
+  // 完整 AIO 整組：有冷排尺寸 + 整機語意 → 不是配件
+  const hasRad = /(?<!\d)(120|240|280|360|420)(?!\d)/.test(name);
+  if (hasRad && /MasterLiquid|CoreLiquid|一體式|預裝風扇|HydroShift|Panorama|\bAIO\b|LC\s|Frozen|HyperFlow|LIQMAX|TH[-\s]?\d{3}/i.test(name)) {
+    return false;
+  }
+  if (/水冷液|\bT1000\b.*水冷|\bP1000\b.*水冷/i.test(name)) return true;
+  if (/G1\/4|延伸管|硬管\s*水冷|水冷管接頭|洩壓閥|止水環|水道板|水箱\s*幫浦|幫浦組|水溫\s*水流/i.test(name)) return true;
+  if (/水冷管發光|發光套件A1|電競水冷管/i.test(name)) return true;
+  if (/水冷排風扇|SWAFAN|水冷頭風扇|IMF70/i.test(name)) return true;
+  // 單賣 CPU 水冷頭／Pacific 分體件（無 240/360 冷排尺寸）
+  if (!hasRad && /Pacific\s+(?:MX|SW|SF|TF|DP|PR)|CPU\s*水冷頭|水冷頭\s*[\(（]/i.test(name)) return true;
+  if (!hasRad && /水冷頭/i.test(name) && !/MasterLiquid|CoreLiquid|\bAIO\b|一體式|預裝|LC\s|RYUO|龍王/i.test(name)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 一體式水冷判定（集中一處）。
+ * 不可用 `\bLiquid\b`：MasterLiquid／CoreLiquid 黏字吃不到。
+ * 不可只靠「一體式風扇」：COUGAR Unity 等是系統風扇組。
+ */
+function isAioCooler(name: string): boolean {
+  if (isCustomLoopAccessory(name)) return false;
+  // 明確空冷本體：雙塔／導管塔，且無水冷簽章
+  if (/雙塔|導管|塔散|下吹式|Peerless\s*Assassin|NH-[UD]\d/i.test(name)
+      && !/水冷|冷頭|冷排|MasterLiquid|CoreLiquid|\bAIO\b|\bLC\b|HydroShift|Panorama/i.test(name)) {
+    return false;
+  }
+  if (/一體式水冷|\bAIO\b/i.test(name)) return true;
+  // 裸「水冷」但排除已由 isCustomLoopAccessory 處理的分體件
+  if (/水冷/i.test(name) && !isCustomLoopAccessory(name)) return true;
+  // 產品線（黏字／系列名）
+  if (/MasterLiquid|CoreLiquid|LIQMAX|HyperFlow|NANCOOL|HydroShift|Panorama/i.test(name)) return true;
+  if (/Frozen\s*Warframe|Trofeo\s*Vision|Wonder\s*Vision|Grand\s*Vision/i.test(name)) return true;
+  if (/\b(?:RYUO|RYUJIN|Atmos|Asetek)\b/i.test(name)) return true;
+  if (/(?:飛龍|白龍|龍王|龍神|WATERFORCE|鷹魂)/i.test(name)
+      && (/(?<!\d)(120|240|280|360|420)(?!\d)/.test(name) || /冷頭|冷排|水冷/i.test(name))) {
+    return true;
+  }
+  // 華碩／微星 LC 水冷線
+  if (/(?:Prime|TUF|ROG|GAMING|AYW)\s+(?:Gaming\s+)?LC\b/i.test(name)) return true;
+  if (/\bLC\s*(?:III|II|I)\b/i.test(name)) return true;
+  // 冷頭 + 冷排尺寸
+  if (/冷頭/i.test(name) && /(?<!\d)(120|240|280|360|420)(?!\d)/.test(name)) return true;
+  // 冷排／裸排（機殼「支援冷排」在 cooler 分類外）
+  if (/(?:冷排|裸排)/i.test(name) && !/顯卡長|CPU高|U高|全景玻璃/i.test(name)) return true;
+  // 預裝風扇 + 240/360… 且非塔散
+  if (/(?:預裝|預先安裝|預安裝).{0,8}風扇/i.test(name)
+      && /(?<!\d)(240|280|360|420)(?!\d)/.test(name)
+      && !/雙塔|導管|塔散/i.test(name)) {
+    return true;
+  }
+  // 喬思伯等 TH-240／TH-360
+  if (/\bTH[-\s]?(120|240|280|360|420)\b/i.test(name)) return true;
+  return false;
+}
+
+/** AIO 冷排尺寸：型號／品名內 240／360 等（前後非數字；360N／360P 型號尾綴可接受）。 */
+function detectAioRadiatorSize(name: string): string | null {
+  const m = name.match(/(?<!\d)(120|240|280|360|420)(?!\d)/);
+  return m ? `${m[1]}mm` : null;
+}
+
 function detectCoolerSubcategory(name: string): string | null {
   const upperName = name.toUpperCase();
 
+  // M.2／SSD 散熱片不是 CPU 塔扇（曾整批落「單塔空冷」）
+  if (/M\.2|2280|SSD\s*固態|固態硬碟散熱|硬碟散熱片|SSD\s*散熱/i.test(name)
+      && !/水冷|\bAIO\b|塔散|下吹|雙塔|空冷/i.test(name)) {
+    return hierarchy('散熱膏/配件', 'M.2 散熱') ?? '散熱膏/配件 > M.2 散熱';
+  }
+
+  // 分體水冷零件（優先於 AIO：品名含「水冷」）
+  if (isCustomLoopAccessory(name)) {
+    return hierarchy('散熱膏/配件', '分體水冷配件') ?? '散熱膏/配件 > 分體水冷配件';
+  }
+
   let type = '單塔空冷';
-  if (/\b(散熱膏|導熱膏|涼膏|熱膏|針筒|導熱貼)\b/i.test(name) || upperName.includes('散熱膏') || upperName.includes('導熱膏')) {
+  if (isThermalPasteOrPad(name)) {
     type = '散熱膏/配件';
-  } else if (/\b(水冷|AIO|Liquid|GM700TZ|Flow|飛龍|白龍|龍王)\b/i.test(name) || upperName.includes('水冷') || upperName.includes('一體式水冷')) {
+  } else if (isAioCooler(name)) {
     type = '一體式水冷 (AIO)';
   } else if (upperName.includes('下吹')) {
     type = '下吹式空冷';
-  } else if (upperName.includes('雙塔')) {
-    type = '雙塔空冷';
+  } else if (upperName.includes('雙塔') || /導管/i.test(name)) {
+    // 導管＋高度但未寫雙塔：多數中高塔；雙塔關鍵字優先，其餘導管視為單塔本體仍可
+    type = upperName.includes('雙塔') ? '雙塔空冷' : '單塔空冷';
   }
 
   const led = upperName.includes('ARGB') ? 'ARGB' : upperName.includes('RGB') ? 'RGB' : '無光';
 
   if (type === '一體式水冷 (AIO)') {
-    let size: string | null = null;
-    // 用數字前後界以正確匹配「360mm」等緊接單位的寫法
-    const sizeMatch = name.match(/(?<!\d)(120|240|280|360|420)(?!\d)/);
-    if (sizeMatch) size = `${sizeMatch[1]}mm`;
-    return hierarchy(type, size, led);
+    // 缺冷排尺寸 → 未標尺寸（避免只有「一體式水冷」單層）
+    return hierarchy(type, detectAioRadiatorSize(name) ?? '未標尺寸', led);
   }
 
   if (type === '散熱膏/配件') return type;
 
-  return hierarchy(type, detectCoolerHeightTier(name), led);
+  // 空冷缺高度 → 未標尺寸，與有高度的路徑語意一致
+  return hierarchy(type, detectCoolerHeightTier(name) ?? '未標尺寸', led);
 }
 
 /**
  * 空冷高度以裝機相容性區間顯示，避免每個 0.1mm 都形成側欄葉節點。
- * 通路的「高15.7」慣用單位是公分；無單位且小於 30 時按 cm 轉為 157mm。
+ * **只信「高／高度 N」**（通路「高15.7」「高度15.6」慣用公分）；禁止裸 `360mm` 當塔高。
  */
 function detectCoolerHeightTier(name: string): string | null {
-  const explicit = name.match(/高\s*(\d+(?:\.\d+)?)\s*(cm|mm)?/i);
-  const fallback = name.match(/\b(\d{2,3}(?:\.\d+)?)\s*mm\b/i);
-  const raw = explicit?.[1] ?? fallback?.[1];
-  if (!raw) return null;
+  const explicit = name.match(/高\s*(\d+(?:\.\d+)?)\s*(cm|mm)?/i)
+    ?? name.match(/(?:高度|Height)\s*[：:]?\s*(\d+(?:\.\d+)?)\s*(cm|mm)?/i);
+  if (!explicit) return null;
 
-  const value = parseFloat(raw);
-  const unit = explicit?.[2]?.toLowerCase();
-  const millimeters = unit === 'cm' || (!unit && explicit && value < 30) ? value * 10 : value;
+  const value = parseFloat(explicit[1]);
+  const unit = explicit[2]?.toLowerCase();
+  const millimeters = unit === 'cm' || (!unit && value < 30) ? value * 10 : value;
   if (millimeters <= 100) return '100mm 以下（低矮型）';
   if (millimeters <= 150) return '101–150mm';
   if (millimeters <= 160) return '151–160mm';
@@ -1139,13 +1368,17 @@ function detectPsuSubcategory(name: string): string | null {
   const form = detectPsuForm(name);
 
   let wattTier: string | null = null;
-  const wattMatch = name.match(/\b(\d{3,4})\s*W\b/i);
+  const wattMatch = name.match(/\b(\d{3,4})\s*W\b/i)
+    // 中文「1100W」「超實在 1100W」或型號尾 500W
+    ?? name.match(/(\d{3,4})\s*瓦/);
   const watt = wattMatch ? parseInt(wattMatch[1], 10) : psuWattFromModel(name);
   if (watt !== null) {
     if (watt < 600) wattTier = '600W 以下';
     else if (watt < 750) wattTier = '600W~750W';
     else if (watt < 1000) wattTier = '750W~1000W';
     else wattTier = '1000W 以上';
+  } else {
+    wattTier = '未標瓦數';
   }
 
   let rating: string | null = null;
@@ -1198,15 +1431,36 @@ function detectCaseSeries(name: string, brand: string | null): string | null {
 }
 
 /**
+ * 品名未寫板型時，以高信心系列／型號回填（僅 fallback，不可覆寫品名明確 token）。
+ * 維護成本可控：只收庫內反覆出現、公開規格穩定的型號。
+ */
+const CASE_FORM_BY_SERIES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bAP20[123]\b|\bAP303\b/i, 'M-ATX'],
+  [/PRO\s*FORGE\s*M051/i, 'M-ATX'],
+  [/MOTI\s*Mini/i, 'Mini-ITX'],
+  [/\bC5\s*Curve\b/i, 'ATX'],
+  [/\bGT502\b/i, 'ATX'],
+];
+
+/**
  * 機殼最大支援主機板板型（DIY 裝機第一相容條件）。
- * 判定順序：E-ATX → M-ATX → Mini-ITX → ATX（E-/M- 必須早於裸 ATX，避免子字串誤中）。
+ * 判定順序：機架／工業 → E-ATX → M-ATX → Mini-ITX → ATX → 系列回填 → 未標板型。
+ * E-/M- 必須早於裸 ATX，避免子字串誤中。
  */
 function detectCaseFormFactor(name: string): string {
   const upper = name.toUpperCase();
+  // 工業／機架：2U~5U、銀欣 RM 系列、工業機殼（不硬塞 ATX）
+  if (/\b[2-5]U\b|工業機殼|機架式|機架式伺服器|\bSST-?RM\b|\bRM\d{2}/i.test(name)
+      || /\bTI-U\d{3}/i.test(name)) {
+    return '機架式 / 工業';
+  }
   if (/\bE-?ATX\b|\bEEB\b|EATX/.test(upper)) return 'E-ATX';
   if (/\bM-?ATX\b|MATX|MICRO-?ATX|µATX/.test(upper)) return 'M-ATX';
   if (/\bMINI-?ITX\b|MINI\s*ITX|\bITX\b/.test(upper)) return 'Mini-ITX';
   if (/\bATX\b/.test(upper)) return 'ATX';
+  for (const [re, form] of CASE_FORM_BY_SERIES) {
+    if (re.test(name)) return form;
+  }
   return '未標板型';
 }
 
@@ -1253,10 +1507,16 @@ const CASE_SIGNAL_RE = /機殼|透側|玻璃側|全景玻璃|進氣孔|網狀|ME
 
 /**
  * 電源型號常把瓦數藏在字母後綴裡而不寫「W」（`SX850P`、`NE850GM`、`A1000GS`）。
- * 要求數字為 450~2000 的 50 倍數且**緊接**字母後綴，機殼型號（`DS900 黑`、`AIR 903`、`V100R`）不會誤中。
+ * 亦支援前綴型（`Focus GX-850`、`CORE GX-750`）。
+ * 要求數字為 450~2000 的 50 倍數；機殼型號（`DS900 黑`、`AIR 903`、`V100R`）不會誤中。
  */
 function looksLikePsuModel(name: string): boolean {
   for (const m of name.matchAll(/(\d{3,4})(?:GM|GS|GX|GH|PT|P|W)\b/gi)) {
+    const watt = parseInt(m[1], 10);
+    if (watt >= 450 && watt <= 2000 && watt % 50 === 0) return true;
+  }
+  // 前綴：GX-850 / GM850 / CORE GX 1000（海韻／全漢促銷常不寫 W）
+  for (const m of name.matchAll(/\b(?:GX|GM|GS|GH|PX)[-\s]?(\d{3,4})\b/gi)) {
     const watt = parseInt(m[1], 10);
     if (watt >= 450 && watt <= 2000 && watt % 50 === 0) return true;
   }
@@ -1265,11 +1525,13 @@ function looksLikePsuModel(name: string): boolean {
 
 /** 零件組合的搭配類型（依實際在售組合：機殼+電源最多，其次 CPU+主機板、螢幕+周邊）。 */
 function comboType(name: string): string {
-  const hasPsu = /電源|電供|\d{3,4}\s?W\b|全模組|半模組/i.test(neutralizeFakePlus(name)) || looksLikePsuModel(name);
-  const hasCooler = /水冷|散熱器|塔散|\bAIO\b|龍王|龍神|WATERFORCE|飛鷹|鷹魂/i.test(name);
+  const cleaned = neutralizeFakePlus(name);
+  const hasPsu = /電源|電供|\d{3,4}\s?W\b|全模組|半模組/i.test(cleaned) || looksLikePsuModel(cleaned);
+  const hasCooler = /水冷|散熱器|塔散|\bAIO\b|龍王|龍神|WATERFORCE|飛鷹|鷹魂|\bLC\s*\d{3}\b|\bNX\d{3}\b/i.test(name);
+  const hasCase = CASE_SIGNAL_RE.test(name) || /網狀版|透側版|全景玻璃機殼|玻璃透側機殼/i.test(name);
   if (hasPsu && hasCooler) return '散熱器 + 電源';
-  if (hasPsu && CASE_SIGNAL_RE.test(name)) return '機殼 + 電源';
-  if (hasCooler && CASE_SIGNAL_RE.test(name)) return '散熱器 + 機殼';
+  if (hasPsu && hasCase) return '機殼 + 電源';
+  if (hasCooler && hasCase) return '散熱器 + 機殼';
   if (RE_CPU_MODEL.test(name) && (MOTHERBOARD_CHIPSET_RE.test(name) || /主機板/.test(name))) return 'CPU + 主機板';
   if (MOTHERBOARD_CHIPSET_RE.test(name) && /DDR[45]|記憶體|SSD|NVMe|\d+\s?TB/i.test(name)) return '主機板 + 記憶體/儲存';
   if (/螢幕|顯示器|MONITOR/i.test(name)) return '螢幕 + 周邊';
@@ -1300,38 +1562,198 @@ function detectPackageSubcategory(name: string, baseCategory?: ProductCategory):
   return hierarchy('零件組合', comboType(name));
 }
 
+/**
+ * 清除規格噪音後，從「型號 token」抽吋數。
+ * 例：M27UP→27、CS272→27、X32→32、EK220Q→22、MA270S→27、
+ * MA320UP→32、PV3200U→32、P2426→24、271PHW→27、PD34→34、VS207DF→20
+ * 跳過純世代後綴 E14/X24；純數字 token（價位）不取。
+ */
+function inchFromModelToken(token: string): number | null {
+  if (!token || isMonitorGenSuffixToken(token)) return null;
+  if (!/[A-Z]/i.test(token)) return null;
+  const digits = token.match(/(\d{2,4})/);
+  if (!digits) return null;
+  const d = digits[1];
+  // 2 位直接當吋；3–4 位取前兩位（272→27、220→22、3200→32、2426→24）
+  const n = d.length === 2 ? parseInt(d, 10) : parseInt(d.slice(0, 2), 10);
+  return MONITOR_SIZES.has(n) ? n : null;
+}
+
+/** 去掉 Hz／HDR／曲率／價位等，避免被誤當型號吋數。 */
+function scrubMonitorNameForModelScan(name: string): string {
+  return name
+    .replace(/\$[\d,]+/g, ' ')
+    .replace(/[〈<][^〉>]*[〉>]/g, ' ')
+    .replace(/\b\d{2,4}\s*Hz\b/gi, ' ')
+    .replace(/\bHDR\s*\d+\b/gi, ' ')
+    .replace(/\bHDMI\s*[\d.]+\b/gi, ' ')
+    .replace(/\b\d{3,4}\s*R\b/gi, ' ')
+    .replace(/\bUSB\s*[\d.]+/gi, ' ')
+    .replace(/\b(?:PD|TYPE-?C)\s*\d+\s*W\b/gi, ' ')
+    .replace(/\bThunderbolt\s*\d+\b/gi, ' ')
+    .replace(/\b\d+\s*ms\b/gi, ' ')
+    .replace(/\b\d+K\b/gi, ' ')
+    .replace(/\b(?:FHD|QHD|UHD|WQHD|UWQHD|DQHD)\b/gi, ' ');
+}
+
+/**
+ * 從品名抽出螢幕吋數。
+ * 1) 明確「吋/型/【N型】」最優先
+ * 2) 型號內嵌數字（M27UP / CS272 / Predator X32 / EK271 / MAG 275…）
+ * 3) 禁止把 E14/X24 等世代後綴當吋數
+ */
+function detectMonitorInch(name: string): number | null {
+  const bracket = name.match(/【\s*(\d{2}(?:\.\d)?)\s*型\s*】/);
+  if (bracket) {
+    const n = Math.round(parseFloat(bracket[1]));
+    if (n >= 10 && n <= 120) return n;
+  }
+  const explicit = name.match(/(\d{2}(?:\.\d)?)\s*(?:吋|型|inch|"|″)/i);
+  if (explicit) {
+    const n = Math.round(parseFloat(explicit[1]));
+    if (n >= 10 && n <= 120) return n;
+  }
+
+  const candidates: number[] = [];
+  const add = (n: number | null): void => {
+    if (n != null && MONITOR_SIZES.has(n)) candidates.push(n);
+  };
+
+  // MAG 275 / MPG 341 空白分隔：token 掃描也吃得到 275CQDF，這裡再保險一次
+  for (const m of name.matchAll(/\b(?:MAG|MPG)\s+(\d{2,3})/gi)) {
+    const d = m[1];
+    add(d.length >= 3 ? parseInt(d.slice(0, 2), 10) : parseInt(d, 10));
+  }
+
+  // 泛用型號 token：含字母+2–4 位數字的料號（使用者要求：未標吋靠型號回填）
+  const scrubbed = scrubMonitorNameForModelScan(name);
+  for (const token of scrubbed.match(/\b[A-Z]*\d{2,4}[A-Z0-9]*\b/gi) ?? []) {
+    add(inchFromModelToken(token));
+  }
+
+  if (candidates.length === 0) return null;
+  // 主流桌面尺寸優先（同品名多候選時：MAG 275 + 誤抓 X24 → 27）
+  return candidates.find(n => MONITOR_MAINSTREAM_SIZES.has(n)) ?? candidates[0] ?? null;
+}
+
+/**
+ * 尺寸路徑：主流吋第一層直接露出；34/49/57 標超寬／帶魚語意；
+ * ≤21 併可攜桶、≥43 併大型；其餘併其他尺寸。
+ * 缺吋 → `其他尺寸 > 未標吋數`（**必須**先有吋數層，再掛品牌，避免側欄把 Acer/MSI 與 28吋 排成同層）。
+ */
+function monitorSizePath(inch: number | null): string[] {
+  if (inch == null) return ['其他尺寸', '未標吋數'];
+  if (inch === 34) return ['34吋超寬'];
+  if (inch === 49) return ['49吋帶魚'];
+  if (inch === 57) return ['57吋帶魚'];
+  if (MONITOR_MAINSTREAM_SIZES.has(inch)) return [`${inch}吋`];
+  if (inch <= 21) return ['可攜 / 小尺寸', `${inch}吋`];
+  if (inch >= 43) return ['大型顯示器', `${inch}吋`];
+  return ['其他尺寸', `${inch}吋`];
+}
+
+function detectMonitorPanel(name: string): string | null {
+  if (/QD-?OLED/i.test(name)) return 'QD-OLED';
+  // WOLED 併入 OLED，減少側欄碎片
+  if (/\bOLED\b|WOLED/i.test(name)) return 'OLED';
+  if (/MINI-?\s*LED|MiniLED/i.test(name)) return 'Mini-LED';
+  if (/\bIPS\b|FAST\s*IPS|NANO\s*IPS|AHVA/i.test(name)) return 'IPS';
+  if (/\bVA\b|FAST\s*VA/i.test(name)) return 'VA';
+  if (/\bTN\b/.test(name.toUpperCase())) return 'TN';
+  // 量子點／QLED（非 OLED）：獨立選項，避免落未標
+  if (/量子點|\bQLED\b/i.test(name)) return '量子點';
+  return null;
+}
+
+/** 更新率階；缺值回 null（不寫未標）。 */
+function detectMonitorRefreshTier(name: string): string | null {
+  const dualPrimary = name.match(/4K\s*[-–]?\s*(\d{2,3})\s*Hz/i)
+    ?? name.match(/UHD\s*[-–]?\s*(\d{2,3})\s*Hz/i)
+    ?? name.match(/QHD\s*[-–]?\s*(\d{2,3})\s*Hz/i)
+    ?? name.match(/2K\s*[-–]?\s*(\d{2,3})\s*Hz/i);
+  const plain = name.match(/(\d{2,3})\s*Hz/i);
+  const hz = Number((dualPrimary ?? plain)?.[1] ?? 0);
+  if (!hz || hz < 30 || hz > 1000) return null;
+  if (hz <= 100) return '100Hz 以下';
+  if (hz <= 165) return '120–165Hz';
+  if (hz <= 240) return '170–240Hz';
+  return '240Hz 以上';
+}
+
+/**
+ * 解析度（僅寫 specs 供工具列篩選，不進側欄樹）。
+ * 優先：像素尺寸 → 關鍵字；雙模（4K-144/FHD-288）以較高解析度為準。
+ * 缺值回 null（不造「未標解析度」）。
+ */
+function detectMonitorResolution(name: string): string | null {
+  // 帶魚 / 超寬像素（優先於泛用 2K/4K 關鍵字）
+  if (/5120\s*[x×]\s*1440|DQHD|5K2K|5120X1440/i.test(name)) return '帶魚 (DQHD)';
+  if (/3440\s*[x×]\s*1440|UWQHD|3440X1440|21\s*:\s*9.{0,20}3440|3440.{0,12}21\s*:\s*9/i.test(name)) {
+    return '超寬 (UWQHD)';
+  }
+  if (/2560\s*[x×]\s*1080|UWFHD|2560X1080/i.test(name)) return '超寬 (UWFHD)';
+  // 8K / 5K 少見
+  if (/7680\s*[x×]\s*4320|\b8K\b/i.test(name)) return '8K';
+  if (/5120\s*[x×]\s*2880|\b5K\b/i.test(name)) return '5K';
+  // 4K / UHD
+  if (/3840\s*[x×]\s*2160|3840X2160|\bUHD\b|\b4K\b|2160P/i.test(name)) return '4K / UHD';
+  // 2K / QHD（含 QHD+；避免把型號 Q 單獨當 2K）
+  if (/2560\s*[x×]\s*1440|2560X1440|\bQHD\+?\b|\bWQHD\b|\b2K\b|1440P/i.test(name)) return '2K / QHD';
+  // FHD
+  if (/1920\s*[x×]\s*1080|1920X1080|\bFHD\b|FULL\s*HD|1080P/i.test(name)) return 'FHD';
+  // 型號慣例（覆蓋率補強，僅在無明確像素時）：…U / UP 常 4K、…Q / QP 常 2K
+  // 限常見桌面電競前綴，避免誤殺
+  if (/\b(?:MAG|MPG|XG|PG|VG|XV|M|G|S|FO|MO|GO)\s*\d{2,3}U[A-Z0-9]*\b/i.test(name)
+      || /\bM\d{2}U[A-Z0-9]*\b/i.test(name)) {
+    return '4K / UHD';
+  }
+  if (/\b(?:MAG|MPG|XG|PG|VG|XV|M|G|S|FO|MO|GO)\s*\d{2,3}Q[A-Z0-9]*\b/i.test(name)
+      || /\bM\d{2}Q[A-Z0-9]*\b/i.test(name)) {
+    return '2K / QHD';
+  }
+  return null;
+}
+
+/** 層級 join：跳過 null/空字串，不中斷後續層（與 hierarchy 的 break 行為不同）。 */
+function monitorHierarchy(...levels: (string | null | undefined)[]): string | null {
+  const out = levels.map(l => (l && l.trim()) || '').filter(Boolean);
+  return out.length > 0 ? out.join(' > ') : null;
+}
+
+/**
+ * 螢幕子分類樹：尺寸桶 [> 實際吋／未標吋數] > 品牌。
+ * 層級固定：尺寸語意永遠在品牌之上，同層不會混「28吋」與「Acer」。
+ * 面板／更新率／解析度寫入 specs 供工具列篩選，不進 path。
+ */
 function detectMonitorSubcategory(name: string): string | null {
-  // 1) 明確標示「吋/型/inch」優先
-  let size: string | null = null;
-  const sizeMatch = name.match(/(\d{2}(?:\.\d)?)\s*(?:吋|型|inch|"|″)/i);
-  if (sizeMatch) {
-    const n = Math.round(parseFloat(sizeMatch[1]));
-    if (n >= 10 && n <= 120) size = `${n}吋`;
-  }
-  // 2) 退而求其次：台灣螢幕慣例把尺寸藏在型號數字（XV272→27、VA249→24、PG32→32）
-  if (!size) {
-    const modelPatterns = [/[A-Za-z](\d{2})/g, /\b(\d{2})[A-Za-z]/gi, /\b(\d{2})\d{1,2}[A-Za-z]/gi];
-    for (const re of modelPatterns) {
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(name))) {
-        const n = parseInt(m[1], 10);
-        if (MONITOR_SIZES.has(n)) { size = `${n}吋`; break; }
-      }
-      if (size) break;
-    }
-  }
+  const inch = detectMonitorInch(name);
+  const sizeLevels = monitorSizePath(inch);
+  const brand = extractBrand(name) ?? null;
+  return monitorHierarchy(...sizeLevels, brand);
+}
 
-  let resolution: string | null = null;
-  if (/4K|UHD|3840/i.test(name)) resolution = '4K UHD';
-  else if (/5K|5120/i.test(name)) resolution = '5K';
-  else if (/2K|QHD|2560|1440P/i.test(name)) resolution = '2K QHD';
-  else if (/FHD|1920|1080P|FULL\s*HD/i.test(name)) resolution = 'FHD 1080p';
+/**
+ * 從品名抽出螢幕面板／更新率／解析度，寫入 specs 供 API filter。
+ * **三欄必填**：偵測不到時寫「未標示」，保證 facet 選項可覆蓋全庫、無漏網值。
+ * （與側欄尺寸／品牌不同：尺寸一定有桶；這三維資料來源常省略。）
+ */
+function monitorSpecFields(rawName: string): Record<string, string> {
+  return {
+    panel: detectMonitorPanel(rawName) ?? '未標示',
+    refreshTier: detectMonitorRefreshTier(rawName) ?? '未標示',
+    resolution: detectMonitorResolution(rawName) ?? '未標示',
+  };
+}
 
-  let refresh: string | null = null;
-  const hzMatch = name.match(/\b(\d{2,3})\s*HZ\b/i);
-  if (hzMatch) refresh = `${hzMatch[1]}Hz`;
-
-  return hierarchy(size, resolution, refresh);
+/** 非螢幕時清掉 panel/refreshTier/resolution，避免重分類後殘留。 */
+function finalizeProductSpecs(
+  product: Product,
+  cat: ProductCategory,
+  rawName: string,
+): Record<string, string> {
+  const { panel: _p, refreshTier: _r, resolution: _res, ...base } = product.specs as Record<string, string>;
+  if (cat !== ProductCategory.MONITOR) return base;
+  return { ...base, ...monitorSpecFields(rawName) };
 }
 
 /**
@@ -1357,10 +1779,8 @@ export function detectSubcategory(category: ProductCategory, name: string, baseC
 
   const upperName = name.toUpperCase();
 
-  // 滑鼠 / 喇叭：品牌 > 類型（抓不到品牌時退回只有類型層）
-  // 鍵盤 / 耳機麥克風 / 網通：類型優先，品牌殿後（見各自 detect*）
+  // 鍵盤 / 滑鼠 / 耳機 / 喇叭 / 網通：類型優先，品牌殿後（見各自 detect*）
   const brand = extractBrand(name) ?? null;
-  const withBrand = (type: string | null): string | null => (brand ? hierarchy(brand, type) : type);
   /** 類型路徑在前、品牌在後；type 可含 `A > B` 多層。 */
   const typeThenBrand = (type: string): string => (brand ? `${type} > ${brand}` : type);
 
@@ -1370,11 +1790,7 @@ export function detectSubcategory(category: ProductCategory, name: string, baseC
 
   if (category === ProductCategory.HEADSET) return detectHeadsetSubcategory(name, brand);
 
-  if (category === ProductCategory.SPEAKER) {
-    let type = '電腦喇叭';
-    if (upperName.includes('藍牙') || upperName.includes('BLUETOOTH') || upperName.includes('無線') || upperName.includes('WIRELESS')) type = '藍牙 / 無線喇叭';
-    return withBrand(type);
-  }
+  if (category === ProductCategory.SPEAKER) return detectSpeakerSubcategory(name, brand);
 
   if (category === ProductCategory.FAN) {
     // 台灣通路慣把尺寸藏在型號（TF120 / MR120 / TL140 / TR120）；用「非數字前後界」抓 120/140
@@ -1385,27 +1801,49 @@ export function detectSubcategory(category: ProductCategory, name: string, baseC
   }
 
   if (category === ProductCategory.NETWORK) {
-    // 網通：設備類型 > 品牌（不再先攤一整排品牌）
+    // 網通：設備類型 > 品牌（先類型後品牌；可回收「其他網通」的交換器／延伸器／網卡／AP）
     let type = '其他網通設備';
     if (/攝影機|WEBCAM|視訊鏡頭/i.test(name)) type = '網路攝影機';
     else if (/MESH|ZENWIFI|VELOP|\bDECO\b/i.test(name)) type = '無線路由器 > Mesh 網狀';
-    else if (/路由器|分享器|ROUTER/i.test(name)) type = '無線路由器';
-    else if (/PCE-|PCI-?E|網路卡|網卡|LAN\s*CARD|藍牙接收|藍芽接收|USB.{0,8}(藍牙|藍芽|WI-?FI)/i.test(name)) type = '網路卡 / 接收器';
-    else if (/交換器|SWITCH|\bHUB\b/i.test(name)) type = '交換器';
+    // USB／PCIe 網卡與藍牙接收（Archer TX/TBE/TXE 是網卡不是路由）
+    else if (/PCE-|PCI-?E\s*網|網路卡|網卡|LAN\s*CARD|藍牙接收|藍芽接收|USB.{0,10}(藍牙|藍芽|WI-?FI|無線)|Archer\s*T[XBE]{1,2}|MW\d+US|\bUB\d{3}\b|微型\s*USB\s*接收|\bBE\d{4}E\b/i.test(name)
+      || (/\bPCI-?E\b|\bPCIe\b/i.test(name) && /WI-?FI|無線|AX\d|BE\d/i.test(name))) {
+      type = '網路卡 / 接收器';
+    }
+    // 交換器：N 埠、SFP、XGS、TL-SX…（不必品名寫「交換器」）
+    else if (/交換器|SWITCH|\bHUB\b|\d+\s*埠|【\d+埠】|SFP\+|XGS\d|TL-S[XG]|SG\d{3,4}|MS\d{3,4}/i.test(name)) {
+      type = '交換器';
+    }
+    // Wi-Fi 延伸器
+    else if (/延伸器|訊號延伸|Range\s*Extender|Wi-?Fi\s*擴充|\bRE\d{3}\b|AC1200.*延伸|AX\d+.*延伸/i.test(name)) {
+      type = 'Wi-Fi 延伸器';
+    }
+    // 企業／吸頂 AP
+    else if (/\bEAP\d|吸頂式|吸頂|Omada|無線基地台|Access\s*Point|企業級.*AP/i.test(name)) {
+      type = '無線基地台 / AP';
+    }
+    else if (/路由器|分享器|ROUTER|\bARCHER\b(?!\s*TX)/i.test(name)) type = '無線路由器';
     else if (/NAS|SYNOLOGY|群暉|QNAP|威聯通|華芸|ASUSTOR|DISKSTATION/i.test(name)) type = 'NAS 網路儲存';
     return typeThenBrand(type);
   }
 
   if (category === ProductCategory.CABLE) return detectCableSubcategory(upperName);
 
-  // 作業系統與應用軟體同一分類，靠第一層區隔
+  // 作業系統與應用軟體同一分類，靠第一層區隔。
+  // 先判應用軟體：Office 常寫「WIN10、MAC 共用」會被 WIN10 誤吸進「作業系統 > Windows 10」。
   if (category === ProductCategory.OS) {
+    if (/防毒|防護|資安|ANTIVIRUS|NORTON|MCAFEE|KASPERSKY|卡巴斯基|諾頓|趨勢|PC-?CILLIN/.test(upperName)) {
+      return '應用軟體 > 防毒軟體';
+    }
+    if (/OFFICE|MICROSOFT\s*365|文書|WORD|EXCEL|POWERPOINT|OUTLOOK/.test(upperName)
+        && !/WINDOWS\s*11|WIN\s*11|WINDOWS\s*10\s*(?:家用|專業|Pro|Home)|WIN\s*10\s*(?:家用|專業)/.test(upperName)) {
+      return '應用軟體 > 辦公軟體';
+    }
+    // 真 Windows 本體（家用／專業／隨機版／彩盒），不是「相容 WIN10」的 Office
     if (/WIN\s?11|WINDOWS\s?11/.test(upperName)) return '作業系統 > Windows 11';
     if (/WIN\s?10|WINDOWS\s?10/.test(upperName)) return '作業系統 > Windows 10';
     if (/WINDOWS\s*SERVER|SERVER\s*20\d\d/.test(upperName)) return '作業系統 > Windows Server';
     if (/作業系統|WINDOWS|LINUX|CHROME\s*OS/.test(upperName)) return '作業系統 > 其他作業系統';
-    if (/防毒|防護|資安|ANTIVIRUS|NORTON|MCAFEE|KASPERSKY|卡巴斯基|諾頓|趨勢|PC-?CILLIN/.test(upperName)) return '應用軟體 > 防毒軟體';
-    if (/OFFICE|MICROSOFT 365|文書/.test(upperName)) return '應用軟體 > 辦公軟體';
     return '應用軟體 > 其他軟體';
   }
 
@@ -1451,6 +1889,62 @@ function detectMouseSubcategory(name: string, brand: string | null): string {
   }
   const conn = isWirelessPeripheral(name) ? '無線' : '有線';
   return hierarchy(type, conn, brand) ?? type;
+}
+
+/**
+ * 喇叭 / 音響：型態 > 品牌（有線／藍牙不當主軸，雙模很常見）。
+ * 型態：聲霸 → 重低音單顆 → 2.1／多件式 → 2.0 桌面／書架 → 便攜藍牙 → 其他。
+ */
+function detectSpeakerSubcategory(name: string, brand: string | null): string {
+  const type = detectSpeakerForm(name);
+  return brand ? `${type} > ${brand}` : type;
+}
+
+function detectSpeakerForm(name: string): string {
+  // 聲霸（含 bar + 重低音兩件式；利維坦等系列名）
+  if (/聲霸|SOUNDBAR|SOUND\s*BAR|利維坦|LEVIATHAN|\bX-?BAR\b/i.test(name)) {
+    return '聲霸';
+  }
+
+  // 單顆主動重低音（排除已標 2.0/2.1／多件／聲霸、以及電競全頻喇叭用「重低音」行銷）
+  const multiPiece = /2\s*\.\s*[01]|5\s*\.\s*1|7\s*\.\s*1|三件式|二件式|兩件式|多件式/i.test(name);
+  if (
+    !multiPiece
+    && /主動式\s*(超)?重低音|(超)?重低音\s*喇叭|SUB\s*WOOFER|超低音\s*喇叭|\bSW\d{1,2}\b/i.test(name)
+    && !/NOMM|天狼星|聲霸|SOUNDBAR|電競\s*喇叭/i.test(name)
+  ) {
+    return '重低音（單顆）';
+  }
+
+  // 2.1／多件式（含 5.1）
+  if (/2\s*\.\s*1|5\s*\.\s*1|7\s*\.\s*1|三件式|多件式/i.test(name)) {
+    return '2.1／多件式';
+  }
+
+  // 2.0 桌面／書架（含電競桌面、USB 多媒體、多音路書架、Nommo 等系列；雙模藍牙靠 2.0／三音路先吃）
+  if (
+    /2\s*\.\s*0|二件式|兩件式|書架|BOOKSHELF|主動式\s*喇叭|電競\s*喇叭|多媒體喇叭|電腦喇叭|三音路|二音路|NOMM|天狼星/i.test(name)
+    || (/\bUSB\b/i.test(name) && /喇叭|SPEAKER/i.test(name))
+  ) {
+    return '2.0 桌面／書架';
+  }
+
+  // 便攜／串流藍牙（含 藍芽 異體字）
+  if (/便攜|隨身|串流喇叭|手提|BST-|藍牙串流|藍芽串流/i.test(name)) {
+    return '便攜藍牙';
+  }
+  // 純藍牙／無線且無桌面喇叭訊號 → 便攜；光纖／RCA／聲道等屬桌面
+  if (
+    /(藍牙|藍芽|BLUETOOTH|\bBT\b|WIRELESS|無線)/i.test(name)
+    && !/2\s*\.\s*[01]|主動式|二件|三件|聲霸|電競|光纖|RCA|聲道|木質|木紋|Hi-?Res|高音|中低音/i.test(name)
+  ) {
+    return '便攜藍牙';
+  }
+
+  // 有聲道字樣但未寫 2.0/2.1（少數品名）→ 仍當桌面
+  if (/聲道/i.test(name)) return '2.0 桌面／書架';
+
+  return '其他喇叭';
 }
 
 /**
@@ -1579,8 +2073,8 @@ export function categorizeProduct(product: Product): Product {
   let needsRecategorize = !isDiyCategory(cat) || cat === ProductCategory.PACKAGE;
   if (cat === ProductCategory.PACKAGE && /【加購優惠】|^加購優惠/.test(raw)) needsRecategorize = true;
 
-  if (cat === ProductCategory.CPU && (isCpuContaminated(raw) || looksLikeMotherboard(raw))) needsRecategorize = true;
-  else if (cat === ProductCategory.MOTHERBOARD && isMbContaminated(raw)) needsRecategorize = true;
+  if (cat === ProductCategory.CPU && (isCpuContaminated(raw) || looksLikeMotherboard(raw) || looksLikeCase(raw))) needsRecategorize = true;
+  else if (cat === ProductCategory.MOTHERBOARD && (isMbContaminated(raw) || looksLikeCase(raw))) needsRecategorize = true;
   else if (cat === ProductCategory.GPU && isGpuContaminated(raw)) needsRecategorize = true;
   else if (cat === ProductCategory.RAM && isRamContaminated(raw)) needsRecategorize = true;
   else if (cat === ProductCategory.SSD && isSsdContaminated(raw)) needsRecategorize = true;
@@ -1618,6 +2112,7 @@ export function categorizeProduct(product: Product): Product {
     ...product,
     category: cat,
     subcategory: newSubcat || undefined,
+    specs: finalizeProductSpecs(product, cat, raw),
   }, condition);
 }
 

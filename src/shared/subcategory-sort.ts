@@ -23,9 +23,12 @@ const GPU_SERIES_ORDER: readonly string[] = [
 ];
 
 const HDD_TYPE_ORDER: readonly string[] = ['桌上型硬碟', 'NAS 專用碟', '監控碟', '企業級硬碟', '行動外接硬碟'];
-// 機殼最大板型：小→大（DIY 由緊湊往標準擴），未標殿後
-const CASE_FORM_ORDER: readonly string[] = ['Mini-ITX', 'M-ATX', 'ATX', 'E-ATX', '未標板型'];
-const NETWORK_ORDER: readonly string[] = ['無線路由器', '網路卡 / 接收器', '交換器', 'NAS 網路儲存', '網路攝影機', '其他網通設備'];
+// 機殼最大板型：小→大（DIY 由緊湊往標準擴），工業／機架與未標殿後
+const CASE_FORM_ORDER: readonly string[] = ['Mini-ITX', 'M-ATX', 'ATX', 'E-ATX', '機架式 / 工業', '未標板型'];
+const NETWORK_ORDER: readonly string[] = [
+  '無線路由器', 'Wi-Fi 延伸器', '無線基地台 / AP', '網路卡 / 接收器', '交換器',
+  'NAS 網路儲存', '網路攝影機', '其他網通設備',
+];
 // 鍵盤：機制 > 軸體 > 有線/無線 > 品牌（軸體長寫在前，避免 includes 被短寫先命中）
 const KEYBOARD_TYPE_ORDER: readonly string[] = ['機械式鍵盤', '薄膜鍵盤'];
 const KEYBOARD_SWITCH_ORDER: readonly string[] = [
@@ -39,6 +42,10 @@ const HEADSET_TYPE_ORDER: readonly string[] = [
 ];
 // 滑鼠：用途 > 有線/無線 > 品牌
 const MOUSE_TYPE_ORDER: readonly string[] = ['電競滑鼠', '垂直滑鼠', '一般滑鼠'];
+// 喇叭：型態 > 品牌（有線／藍牙不當主軸）
+const SPEAKER_TYPE_ORDER: readonly string[] = [
+  '2.0 桌面／書架', '2.1／多件式', '聲霸', '重低音（單顆）', '便攜藍牙', '其他喇叭',
+];
 const FAN_ORDER: readonly string[] = ['12cm 風扇', '14cm 風扇', '8/9cm 小風扇', '其他尺寸風扇'];
 // 線材：大類 > 細類
 const CABLE_ORDER: readonly string[] = [
@@ -83,16 +90,35 @@ const DDR_ORDER: readonly string[] = ['DDR5', 'DDR4', 'D5', 'D4'];
 const SSD_TYPE_ORDER: readonly string[] = ['M.2 NVMe SSD', 'SATA 2.5吋', '行動外接式'];
 const PCIE_ORDER: readonly string[] = ['PCIe 5.0', 'PCIe 4.0', 'PCIe 3.0'];
 const PSU_FORM_ORDER: readonly string[] = ['ATX 電源', 'SFX 電源', 'SFX-L 電源', 'TFX 電源', 'Flex 電源'];
-const PSU_WATT_ORDER: readonly string[] = ['1000W 以上', '750W~1000W', '600W~750W', '600W 以下'];
+const PSU_WATT_ORDER: readonly string[] = ['1000W 以上', '750W~1000W', '600W~750W', '600W 以下', '未標瓦數'];
 const PSU_RATING_ORDER: readonly string[] = ['80+ 鈦金牌', '80+ 白金牌', '80+ 金牌', '80+ 銀牌', '80+ 銅牌', '80+ 白牌'];
 const PSU_MODULAR_ORDER: readonly string[] = ['全模組', '半模組', '直出非模組'];
 const COOLER_TYPE_ORDER: readonly string[] = ['一體式水冷 (AIO)', '雙塔空冷', '單塔空冷', '下吹式空冷', '散熱膏/配件'];
 const COOLER_SIZE_ORDER: readonly string[] = [
   '420mm', '360mm', '280mm', '240mm', '120mm',
   '100mm 以下（低矮型）', '101–150mm', '151–160mm', '161mm 以上',
+  'M.2 散熱', '未標尺寸',
 ];
 const LIGHTING_ORDER: readonly string[] = ['ARGB', 'RGB', '無光'];
-const MONITOR_RESOLUTION_ORDER: readonly string[] = ['5K', '4K UHD', '2K QHD', 'FHD 1080p'];
+// 螢幕側欄樹：尺寸桶 > 實際吋／未標吋數 > 品牌；面板／Hz 走工具列篩選
+const MONITOR_SIZE_ORDER: readonly string[] = [
+  '可攜 / 小尺寸',
+  '22吋', '24吋', '25吋', '27吋', '32吋',
+  '34吋超寬', '49吋帶魚', '57吋帶魚',
+  '大型顯示器', '其他尺寸',
+  // 其他尺寸／可攜／大型 的 L2：實際吋靠數字排序；未標殿後
+  '未標吋數',
+];
+const MONITOR_PANEL_ORDER: readonly string[] = [
+  'QD-OLED', 'OLED', 'Mini-LED', '量子點', 'IPS', 'VA', 'TN', '未標示',
+];
+const MONITOR_REFRESH_ORDER: readonly string[] = [
+  '240Hz 以上', '170–240Hz', '120–165Hz', '100Hz 以下', '未標示',
+];
+/** 螢幕解析度 facet（不進側欄樹）；未標示殿後，覆蓋品名省略 2K/4K 的多數列 */
+const MONITOR_RESOLUTION_ORDER: readonly string[] = [
+  '8K', '5K', '4K / UHD', '帶魚 (DQHD)', '超寬 (UWQHD)', '超寬 (UWFHD)', '2K / QHD', 'FHD', '未標示',
+];
 
 /** 供 Dashboard 前端腳本注入的排序表（單一真相；client 端 compareNodes 不可自帶清單）。 */
 export const SIDEBAR_ORDERS = {
@@ -108,6 +134,7 @@ export const SIDEBAR_ORDERS = {
   keyboardConn: KEYBOARD_CONN_ORDER,
   headsetType: HEADSET_TYPE_ORDER,
   mouseType: MOUSE_TYPE_ORDER,
+  speakerType: SPEAKER_TYPE_ORDER,
   fan: FAN_ORDER,
   cable: CABLE_ORDER,
   cableLeaf: CABLE_LEAF_ORDER,
@@ -127,6 +154,9 @@ export const SIDEBAR_ORDERS = {
   coolerType: COOLER_TYPE_ORDER,
   coolerSize: COOLER_SIZE_ORDER,
   lighting: LIGHTING_ORDER,
+  monitorSize: MONITOR_SIZE_ORDER,
+  monitorPanel: MONITOR_PANEL_ORDER,
+  monitorRefresh: MONITOR_REFRESH_ORDER,
   monitorResolution: MONITOR_RESOLUTION_ORDER,
 } as const;
 
@@ -207,6 +237,7 @@ function semanticRank(category: string, value: string): number {
     return layeredRank(value, [MOUSE_TYPE_ORDER, KEYBOARD_CONN_ORDER]);
   }
   if (category === ProductCategory.HEADSET) return orderedRank(value, HEADSET_TYPE_ORDER);
+  if (category === ProductCategory.SPEAKER) return orderedRank(value, SPEAKER_TYPE_ORDER);
   if (category === ProductCategory.FAN) return orderedRank(value, FAN_ORDER);
   if (category === ProductCategory.CABLE) return twoLevelRank(value, CABLE_ORDER, CABLE_LEAF_ORDER);
   if (category === ProductCategory.OS) return twoLevelRank(value, OS_TOP_ORDER, OS_LEAF_ORDER);
@@ -219,7 +250,10 @@ function semanticRank(category: string, value: string): number {
   if (category === ProductCategory.COOLER) {
     return layeredRank(value, [COOLER_TYPE_ORDER, COOLER_SIZE_ORDER, LIGHTING_ORDER]);
   }
-  if (category === ProductCategory.MONITOR) return orderedRank(value, MONITOR_RESOLUTION_ORDER);
+  if (category === ProductCategory.MONITOR) {
+    // 樹只有尺寸 > 品牌；panel/refresh 不進 path（仍 export 給 dashboard chip 順序）
+    return layeredRank(value, [MONITOR_SIZE_ORDER]);
+  }
 
   return Number.MAX_SAFE_INTEGER;
 }
