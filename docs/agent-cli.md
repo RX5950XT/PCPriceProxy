@@ -3,6 +3,8 @@
 Dashboard 給人看，REST API 給程式接完整 JSON。
 **Agent 模式**給語言模型用：預設精簡 JSON、單位是比價組、價格一律 TWD。
 
+進專案的 Agent 先載 [`skills/pcprice/SKILL.md`](../skills/pcprice/SKILL.md)。
+
 ## 入口
 
 ```bash

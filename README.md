@@ -11,7 +11,7 @@
 | REST API | 一般程式 | `/api/v1/products` 等完整 JSON |
 | **Agent CLI / Agent API** | AI 代理 | `pcprice search …` 或 `/api/v1/agent/*` 精簡 JSON |
 
-詳見 [docs/agent-cli.md](docs/agent-cli.md)。
+Agent 請先載 [skills/pcprice/SKILL.md](skills/pcprice/SKILL.md)。契約見 [docs/agent-cli.md](docs/agent-cli.md)。
 
 ## 功能特色
 
