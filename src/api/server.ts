@@ -6,6 +6,7 @@ import { categoryRoutes } from './routes/categories.js';
 import { compareRoutes } from './routes/compare.js';
 import { sourceRoutes } from './routes/sources.js';
 import { healthRoutes } from './routes/health.js';
+import { agentRoutes } from './routes/agent.js';
 import { rateLimiter } from './middleware/rate-limiter.js';
 import type { ApiResponse } from '../shared/types.js';
 import { AppError } from '../shared/errors.js';
@@ -25,6 +26,7 @@ export function createApp() {
   app.route('/api/v1/compare', compareRoutes);
   app.route('/api/v1/sources', sourceRoutes);
   app.route('/api/v1', healthRoutes);
+  app.route('/api/v1/agent', agentRoutes);
 
   // Root route: serve frontend Dashboard
   app.get('/', (c) => c.html(DASHBOARD_HTML));

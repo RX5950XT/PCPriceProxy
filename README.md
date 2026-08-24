@@ -3,6 +3,16 @@
 整合 **原價屋（CoolPC）**、**欣亞（Sinya）**、**Autobuy** 三大通路的 DIY 電腦零件價格，
 將同一型號商品跨店合併成一張比價卡，並提供依零件特性設計的多層分類側欄。
 
+三種使用方式：
+
+| 方式 | 給誰 | 入口 |
+|---|---|---|
+| 視覺化儀表板 | 人 | `http://localhost:3000` |
+| REST API | 一般程式 | `/api/v1/products` 等完整 JSON |
+| **Agent CLI / Agent API** | AI 代理 | `pcprice search …` 或 `/api/v1/agent/*` 精簡 JSON |
+
+詳見 [docs/agent-cli.md](docs/agent-cli.md)。
+
 ## 功能特色
 
 - **跨店比價**：同 SKU 以精確鍵合併（CPU 型號、GPU 晶片+產品線+VRAM、HDD 原廠料號、RAM 規格+產品線），輔以模糊比對與價差護欄，寧可分開也不誤併。
@@ -34,6 +44,8 @@ npm run dev            # 啟動開發伺服器（tsx watch，啟動即爬一次�
 | `npm run scrape:test` | 測試爬取，輸出 source 與 pipeline 分類對照 |
 | `npm run audit` | 管線稽核（污染 / 重複卡 / 價差異常 全項須 PASS） |
 | `npx tsx src/scripts/clean-and-rebuild.ts` | 用最新分類邏輯清洗既有 DB 並重建比價組（免重爬） |
+| `npm run cli -- search 9800X3D` | Agent CLI 查價（也可用 `./bin/pcprice`） |
+| `npm run scrape:once` | 只爬一輪三家、不開 HTTP |
 
 ## API
 
@@ -67,6 +79,32 @@ Base URL：`http://localhost:3000/api/v1`。所有回應統一 `{ success, data,
 curl 'http://localhost:3000/api/v1/products?category=cpu&q=9800X3D&has_multiple_sources=true'
 ```
 
+## Agent CLI（第三種使用方式）
+
+給 AI 代理用的精簡介面：預設 JSON、單位是比價組、價格 TWD、不含 `rawName` 等冗餘欄位。
+人要掃讀可加 `--table`。完整契約見 [docs/agent-cli.md](docs/agent-cli.md)。
+
+```bash
+# 專案內
+pcprice search 9800X3D --parts-only --in-stock --sort price_asc
+./bin/pcprice categories cpu
+
+# 安裝到 PATH 後
+pcprice search --category gpu --q "5070 Ti" --limit 10
+pcprice show <id>
+pcprice health
+pcprice refresh            # 沒開伺服器也能本機重爬
+```
+
+等價 HTTP：
+
+```bash
+curl 'http://localhost:3000/api/v1/agent/search?q=9800X3D&in_stock=true&sort=price_asc'
+curl 'http://localhost:3000/api/v1/agent/schema'
+```
+
+這是台灣三大**全新零件**通路（原價屋 / 欣亞 / Autobuy），不是蝦皮、不是二手。
+
 ## 部署
 
 專案是**帶排程的常駐 Node 服務**（SQLite 本機檔，非 serverless），已備妥容器化：
@@ -89,7 +127,8 @@ src/
 │   └── matcher.ts      # 跨店合併（精確鍵 → 模糊比對 + 價差護欄）
 ├── ingest.ts       # 管線 + upsert + 汰除孤兒列（scheduler / refresh API 共用）
 ├── storage/        # SQLite（better-sqlite3）+ match_groups 聚合表
-├── api/            # Hono routes + Dashboard（伺服端模板）
+├── api/            # Hono routes + Dashboard（伺服端模板）+ Agent 精簡 API
+├── cli/            # Agent CLI（pcprice）：HTTP 或本機 SQLite
 └── scripts/        # audit-pipeline / clean-and-rebuild / scrape-test
 ```
 

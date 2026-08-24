@@ -479,6 +479,11 @@ export class ProductRepository {
     if (filters.hasMultipleSources) {
       conditions.push('has_multiple_sources = 1');
     }
+    if (filters.inStock) {
+      conditions.push(
+        `id IN (SELECT match_group_id FROM products WHERE match_group_id IS NOT NULL AND in_stock = 1)`,
+      );
+    }
 
     const where = conditions.join(' AND ');
 
@@ -554,6 +559,39 @@ export class ProductRepository {
     }
 
     return { groups, total };
+  }
+
+  /** 以比價組 id 或其中一個商品 id 取出整組。 */
+  findGroupById(id: string): MatchGroup | null {
+    const asProduct = this.findById(id);
+    const groupId = asProduct?.matchGroupId ?? id;
+    const meta = this.db.prepare(`
+      SELECT id, name, brand, model, lowest_price, highest_price
+      FROM match_groups WHERE id = ?
+    `).get(groupId) as {
+      id: string; name: string; brand: string | null; model: string | null;
+      lowest_price: number; highest_price: number;
+    } | undefined;
+    const rows = this.db.prepare(
+      'SELECT * FROM products WHERE match_group_id = ? OR id = ?',
+    ).all(groupId, id) as ProductRow[];
+    if (rows.length === 0) return null;
+    const products = rows.map(rowToProduct);
+    const head = products[0];
+    if (!head) return null;
+    const prices = products.map((item) => item.price);
+    const lowest = meta?.lowest_price ?? Math.min(...prices);
+    const highest = meta?.highest_price ?? Math.max(...prices);
+    return {
+      id: meta?.id ?? groupId,
+      name: meta?.name ?? head.name,
+      brand: meta?.brand ?? head.brand,
+      model: meta?.model ?? head.model,
+      products,
+      lowestPrice: lowest,
+      highestPrice: highest,
+      priceDiff: highest - lowest,
+    };
   }
 
   private buildSourceStatus(source: Source): SourceStatus {

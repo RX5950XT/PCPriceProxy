@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+HERE="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+ROOT="$(cd "$HERE/.." && pwd)"
+TSX="$ROOT/node_modules/.bin/tsx"
+if [[ -x "$TSX" ]]; then
+  exec "$TSX" "$ROOT/src/cli/index.ts" "$@"
+fi
+exec npx --yes tsx "$ROOT/src/cli/index.ts" "$@"

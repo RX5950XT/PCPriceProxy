@@ -7,6 +7,8 @@
 - 執行測試爬取：`npm run scrape:test`
 - 管線稽核：`npm run audit`
 - 清洗 DB 並重建比價組：`npx tsx src/scripts/clean-and-rebuild.ts`
+- Agent CLI 查價：`npm run cli -- search 9800X3D` 或 `./bin/pcprice search 9800X3D`（契約見 `docs/agent-cli.md`）
+- 只爬一輪：`npm run scrape:once`
 - 容器部署：`docker compose up -d --build`（掛 `./data` volume 持久化 SQLite，Dockerfile 已代複製 `schema.sql`）
 
 ## 程式碼規範

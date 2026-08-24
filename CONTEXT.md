@@ -1,7 +1,7 @@
 # 開發交接上下文 (CONTEXT.md)
 
 ## 專案現況
-PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。
+PCPriceProxy 整合原價屋、欣亞、Autobuy 三大通路的電腦零件價格，支援 MatchGroup 跨店整合比價卡片，並提供左側多級展開摺疊選單樹。第三種使用方式是 **Agent CLI / `/api/v1/agent`**（`pcprice search`，見 `docs/agent-cli.md`），給語言模型精簡 JSON，不是 MCP。
 
 ## 系統運作狀態（已驗證，2026-07-16）
 資料流：scrape → normalize → categorize → **diy-filter** → **ingest（upsert + 汰除孤兒列）** → match → `products` / `match_groups`。`npm run test` **151 tests**、clean-and-rebuild 通過。

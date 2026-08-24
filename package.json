@@ -1,13 +1,18 @@
 {
   "name": "pc-price-proxy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
+  "bin": {
+    "pcprice": "bin/pcprice"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc",
     "test": "vitest run",
+    "cli": "tsx src/cli/index.ts",
     "scrape:test": "tsx src/scripts/test-scrape.ts",
+    "scrape:once": "tsx src/scripts/scrape-once.ts",
     "audit": "tsx src/scripts/audit-pipeline.ts",
     "enrich:monitor-seed": "tsx src/scripts/seed-monitor-catalog.ts"
   },
