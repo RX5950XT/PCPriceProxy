@@ -105,6 +105,18 @@ curl 'http://localhost:3000/api/v1/agent/schema'
 
 這是台灣三大**全新零件**通路（原價屋 / 欣亞 / Autobuy），不是蝦皮、不是二手。
 
+## Agent skills
+
+進這個 repo 的 AI Agent（Hermes / Claude Code / Codex 等）**先載 skill，再打 CLI**。
+
+| 路徑 | 用途 |
+|---|---|
+| [skills/pcprice/SKILL.md](skills/pcprice/SKILL.md) | 查價 SOP、讀結果規則、禁止事項 |
+| [skills/README.md](skills/README.md) | skill 索引 |
+| [docs/agent-cli.md](docs/agent-cli.md) | CLI / Agent API 契約 |
+
+之後若要加「組裝清單」「價差監控」等 Agent 流程，新增 `skills/<name>/SKILL.md` 並寫進索引。不要為此專案掛 MCP。
+
 ## 部署
 
 專案是**帶排程的常駐 Node 服務**（SQLite 本機檔，非 serverless），已備妥容器化：
@@ -118,6 +130,9 @@ docker compose up -d --build   # 3000 埠、掛 ./data 持久化 SQLite、每 30
 ## 架構
 
 ```
+skills/             # 給使用本專案查價的 AI Agent（先載 SKILL.md）
+├── README.md
+└── pcprice/
 src/
 ├── scrapers/       # coolpc / sinya / autobuy 三家爬蟲
 ├── processing/
@@ -138,4 +153,5 @@ src/
 
 維護規範見 [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)，
 開發交接紀錄見 [CONTEXT.md](CONTEXT.md)，歷史教訓見 [tasks/lessons.md](tasks/lessons.md)。
+**使用本專案查價的 Agent** 載 [skills/pcprice/SKILL.md](skills/pcprice/SKILL.md)，不要只讀開發規範。
 改動分類或比對邏輯後，務必依序執行：`npm run test` → `clean-and-rebuild` → `npm run audit`（全 PASS）。

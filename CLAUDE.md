@@ -1,5 +1,7 @@
 # CLAUDE.md - 專案通用規範
 
+查價請先載 `skills/pcprice/SKILL.md`。本檔是**開發本專案**的規範，不是查價 SOP。
+
 ## 開發指令
 - 啟動開發伺服器：`npm run dev`
 - 編譯 TypeScript：`npm run build`
