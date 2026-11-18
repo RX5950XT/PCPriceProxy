@@ -152,6 +152,6 @@ src/
 ## 開發須知
 
 維護規範見 [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)，
-開發交接紀錄見 [CONTEXT.md](CONTEXT.md)，歷史教訓見 [tasks/lessons.md](tasks/lessons.md)。
+開發交接與待辦見 [tasks/todo.md](tasks/todo.md)，歷史教訓見 [tasks/lessons.md](tasks/lessons.md)。
 **使用本專案查價的 Agent** 載 [skills/pcprice/SKILL.md](skills/pcprice/SKILL.md)，不要只讀開發規範。
 改動分類或比對邏輯後，務必依序執行：`npm run test` → `clean-and-rebuild` → `npm run audit`（全 PASS）。
